@@ -1,0 +1,11 @@
+name=NVIDIA GeForce RTX 2080 Ti
+major=7 minor=5
+multiProcessorCount=68
+maxThreadsPerMultiProcessor=1024
+maxThreadsPerBlock=1024
+regsPerMultiprocessor=65536
+sharedMemPerMultiprocessor=65536
+sharedMemPerBlockOptin=65536
+maxBlocksPerMultiProcessor=16
+warpSize=32
+l2CacheSizeBytes=5767168

@@ -1,0 +1,11 @@
+kernel,args,regs,shmem,device_name,block_x,block_y,block_z,grid_x,grid_y,grid_z,warmup,reps,time_ms,rows,cols,iters,block,grid_blocks
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.595758,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.597482,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.600235,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.602476,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.602226,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.605140,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.597531,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.608374,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.611405,1048576,1,100,256,4096
+atomic_hotspot,--rows 1048576 --cols 1 --block 256 --iters 100 --warmup 10 --reps 50,7,0,NVIDIA GeForce RTX 2080 Ti,256,1,1,4096,1,1,10,50,2.614149,1048576,1,100,256,4096

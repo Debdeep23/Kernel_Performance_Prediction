@@ -1,0 +1,11 @@
+kernel,args,regs,shmem,device_name,block_x,block_y,block_z,grid_x,grid_y,grid_z,warmup,reps,time_ms,rows,cols,iters,block,grid_blocks
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001625,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001373,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001638,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001537,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001406,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001439,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001490,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001493,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001519,0,0,0,1024,0
+shared_bank_conflict,--warmup 20 --reps 100,206,4096,NVIDIA GeForce RTX 2080 Ti,1024,1,1,0,0,0,20,100,0.001530,0,0,0,1024,0
