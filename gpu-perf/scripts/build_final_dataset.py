@@ -284,7 +284,7 @@ def main():
     # 1) aggregate per-kernel
     agg = aggregate_trials(trial_glob)
 
-    # 2) per-kernel static counts
+    # 2) per-kernel static counts + size_kind
     for r in agg:
         FLOPs,BYTES,SH,WS,AI,pat = static_counts(r)
         r["FLOPs"] = str(FLOPs)
@@ -293,6 +293,13 @@ def main():
         r["working_set_bytes"] = str(WS)
         r["arithmetic_intensity"] = f"{AI:.6f}"
         r["mem_pattern"] = pat
+        # Determine size_kind
+        rows = I(r.get("rows"))
+        cols = I(r.get("cols"))
+        if rows > 0 and cols > 0 and cols != 1:
+            r["size_kind"] = "rows_cols"
+        else:
+            r["size_kind"] = "N"
 
     # 3) GPU metrics + sustained ceilings
     P = read_props(props_out)
@@ -304,7 +311,6 @@ def main():
         r.update({
             "gpu_device_name": P["device_name"],
             "gpu_cc_major": str(P["cc_major"]),
-            "gpu_cc_minor": str(P["cc_minor"]),
             "gpu_sms": str(P["multiProcessorCount"]),
             "gpu_max_threads_per_sm": str(P["maxThreadsPerMultiProcessor"]),
             "gpu_max_blocks_per_sm": str(P["maxBlocksPerMultiProcessor"]),
@@ -312,23 +318,33 @@ def main():
             "gpu_shared_mem_per_sm": str(P["sharedMemPerMultiprocessor"]),
             "gpu_l2_bytes": str(P["l2CacheSizeBytes"]),
             "gpu_warp_size": str(P["warpSize"]),
-            "sustained_mem_bandwidth_gbps": f"{bw:.2f}",
-            "sustained_compute_gflops": f"{fl:.2f}",
+            "calibrated_mem_bandwidth_gbps": f"{bw:.2f}",
+            "calibrated_compute_gflops": f"{fl:.2f}",
         })
+        # Calculate achieved metrics
+        mean_ms = F(r.get("mean_ms"))
+        flops = F(r.get("FLOPs"))
+        bytes_accessed = F(r.get("BYTES"))
+        if mean_ms > 0:
+            r["achieved_compute_gflops"] = f"{(flops/(mean_ms/1000.0)/1e9):.2f}"
+            r["achieved_bandwidth_gbps"] = f"{(bytes_accessed/(mean_ms/1000.0)/1e9):.2f}"
+        else:
+            r["achieved_compute_gflops"] = "0.00"
+            r["achieved_bandwidth_gbps"] = "0.00"
         add_T1_and_speedup(r, fl, bw, warp)
 
-    # 4) write final CSV
+    # 4) write final CSV (removed useless columns: args, device_name, block_x/y/z, grid_x/y/z, warmup, reps, trials, iters, conv_padding, gpu_cc_minor)
     flds = [
-        "kernel","args","regs","shmem","device_name",
-        "block_x","block_y","block_z","grid_x","grid_y","grid_z",
+        "kernel","regs","shmem",
         "block","grid_blocks",
-        "warmup","reps","trials","mean_ms","std_ms",
-        "N","rows","cols","H","W","matN","iters",
+        "mean_ms","std_ms",
+        "N","rows","cols","H","W","matN","size_kind",
         "FLOPs","BYTES","shared_bytes","working_set_bytes","arithmetic_intensity","mem_pattern",
-        "gpu_device_name","gpu_cc_major","gpu_cc_minor","gpu_sms",
+        "gpu_device_name","gpu_cc_major","gpu_sms",
         "gpu_max_threads_per_sm","gpu_max_blocks_per_sm","gpu_regs_per_sm","gpu_shared_mem_per_sm",
         "gpu_l2_bytes","gpu_warp_size",
-        "sustained_mem_bandwidth_gbps","sustained_compute_gflops",
+        "calibrated_mem_bandwidth_gbps","calibrated_compute_gflops",
+        "achieved_bandwidth_gbps","achieved_compute_gflops",
         "T1_model_ms","speedup_model"
     ]
     with open(final_csv, "w", newline="") as f:
