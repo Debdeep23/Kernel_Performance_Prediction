@@ -107,10 +107,10 @@ def per_kernel_counts(k, r, size_kind, N, rows, cols):
         # Parallel reduction over N float32
         # FLOPs: ~N-1 adds
         FLOPs = max(0, N - 1)
-        # BYTES: read N*4 + write partials (rough per-block extra writes)
-        # one partial per block (~N/(2*block)) is common roughness; keep simple:
-        partials = max(1, (N + (2*max(1,block)) - 1) // (2*max(1,block)))
-        BYTES = N*4 + partials*4
+        # BYTES: read N*4 + write partials (one per grid block) + final result
+        grid_blocks = I(r.get("grid_blocks"))
+        partials = max(1, grid_blocks)
+        BYTES = N*4 + partials*4 + 4
         working_set_bytes = N*4
         shared_bytes = max(1, block) * 4   # per-block sMem (one float per thread)
         mem_pattern = "shared_reduction"
@@ -118,9 +118,10 @@ def per_kernel_counts(k, r, size_kind, N, rows, cols):
     elif k == "dot_product":
         # dot of length N: N mul + N-1 add ~ 2N FLOPs
         FLOPs = 2 * N
-        # reads x and y, writes a few partials
-        partials = max(1, (N + (2*max(1,block)) - 1) // (2*max(1,block)))
-        BYTES = 2*N*4 + partials*4
+        # reads x and y, writes partials (one per grid block) + final result
+        grid_blocks = I(r.get("grid_blocks"))
+        partials = max(1, grid_blocks)
+        BYTES = 2*N*4 + partials*4 + 4
         working_set_bytes = 2*N*4
         shared_bytes = max(1, block) * 4
         mem_pattern = "shared_reduction"
@@ -190,7 +191,7 @@ def per_kernel_counts(k, r, size_kind, N, rows, cols):
             FLOPs = out_elems * 18
             # read input + write output (ignore filter reuse detail)
             BYTES = (R*C*4) + (R*C*4)
-            working_set_bytes = R*C*4
+            working_set_bytes = BYTES  # input + output
             mem_pattern = "stencil_3x3"
             conv_padding = "same"
 
@@ -199,7 +200,7 @@ def per_kernel_counts(k, r, size_kind, N, rows, cols):
             out_elems = R * C
             FLOPs = out_elems * (2 * 7 * 7)  # 49 MACs => 98 FLOPs per output
             BYTES = (R*C*4) + (R*C*4)
-            working_set_bytes = R*C*4
+            working_set_bytes = BYTES  # input + output
             mem_pattern = "stencil_7x7"
             conv_padding = "same"
 
