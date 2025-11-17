@@ -324,7 +324,7 @@ int main(int argc, char** argv) {
     dim3 blk(1024), grid(1);
     auto launch = [&]() { shared_bank_conflict_kernel<<<grid, blk>>>(out); };
     float ms = time_ms(launch, warm, reps);
-    printf("KERNEL=shared_bank_conflict block=(1024) grid=(1) regs=206 shmem=4096 time_ms=%.6f\n", ms);
+    printf("KERNEL=shared_bank_conflict block=(1024,1,1) grid=(1,1,1) regs=206 shmem=4096 time_ms=%.6f\n", ms);
     cudaFree(out); return 0;
   }
 
