@@ -11,8 +11,27 @@ peak_gflops_1 = peak_gflops / WARP if peak_gflops>0 else 0.0
 peak_gbps_1   = peak_gbps   / WARP if peak_gbps>0   else 0.0
 
 rd = csv.DictReader(open(RUNS_IN))
-fields = rd.fieldnames + ["T1_model_ms","speedup_model"]
-w  = csv.DictWriter(open(RUNS_OUT,"w",newline=""), fieldnames=fields)
+
+# Drop useless/redundant columns
+COLUMNS_TO_DROP = {
+    "device_name",      # duplicates gpu_device_name
+    "args",             # redundant with other size fields
+    "warmup",           # metadata, not for analysis
+    "reps",             # metadata, not for analysis
+    "trials",           # metadata, not for analysis
+    "iters",            # user requested to drop
+    "block",            # can compute from block_x*block_y*block_z
+    "grid_blocks",      # can compute from grid_x*grid_y*grid_z
+    "shared_bytes",     # duplicates shmem
+    "size_kind",        # not very useful
+    "conv_padding",     # sparse, only for conv kernels
+}
+
+# Keep only useful fields + add new ones
+fields = [f for f in rd.fieldnames if f not in COLUMNS_TO_DROP]
+fields.extend(["T1_model_ms", "speedup_model"])
+
+w  = csv.DictWriter(open(RUNS_OUT,"w",newline=""), fieldnames=fields, extrasaction='ignore')
 w.writeheader()
 
 for r in rd:
