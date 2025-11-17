@@ -1,6 +1,41 @@
 #!/usr/bin/env python3
 import csv, re, sys, glob, math, statistics
 
+# ---------- GPU specifications lookup ----------
+GPU_SPECS = {
+    "NVIDIA GeForce RTX 2080 Ti": {
+        "architecture": "Turing",
+        "peak_gflops_fp32": 13450,  # 68 SMs × 64 cores/SM × 1.545 GHz boost × 2 FLOPs/cycle
+        "peak_bandwidth_gbps": 616,  # 352-bit × 14 Gbps / 8
+    },
+    "NVIDIA GeForce RTX 3090": {
+        "architecture": "Ampere",
+        "peak_gflops_fp32": 35580,
+        "peak_bandwidth_gbps": 936,
+    },
+    "NVIDIA GeForce RTX 3080": {
+        "architecture": "Ampere",
+        "peak_gflops_fp32": 29770,
+        "peak_bandwidth_gbps": 760,
+    },
+    "NVIDIA GeForce RTX 4090": {
+        "architecture": "Ada Lovelace",
+        "peak_gflops_fp32": 82580,
+        "peak_bandwidth_gbps": 1008,
+    },
+}
+
+ARCHITECTURE_MAP = {
+    (6, 0): "Pascal",
+    (6, 1): "Pascal",
+    (7, 0): "Volta",
+    (7, 5): "Turing",
+    (8, 0): "Ampere",
+    (8, 6): "Ampere",
+    (8, 9): "Ada Lovelace",
+    (9, 0): "Hopper",
+}
+
 # ---------- tiny helpers ----------
 def I(x, d=0):
     try:
@@ -178,7 +213,19 @@ def static_counts(row):
         pat   = "unknown"
 
     AI = (FLOPs/float(BYTES)) if BYTES>0 else 0.0
-    return FLOPs, BYTES, SH, WS, AI, pat
+
+    # Branch divergence flag (kernels with explicit control flow divergence)
+    DIVERGENT_KERNELS = {"vector_add_divergent"}
+    has_divergence = 1 if k in DIVERGENT_KERNELS else 0
+
+    # Atomic operations count
+    atomic_ops = 0
+    if k == "atomic_hotspot":
+        atomic_ops = max(1, N) * max(1, iters)
+    elif k == "histogram":
+        atomic_ops = N
+
+    return FLOPs, BYTES, SH, WS, AI, pat, has_divergence, atomic_ops
 
 # ---------- T1 + speedup ----------
 def add_T1_and_speedup(row, peak_gflops, peak_gbps, warp_size):
@@ -286,13 +333,15 @@ def main():
 
     # 2) per-kernel static counts + size_kind
     for r in agg:
-        FLOPs,BYTES,SH,WS,AI,pat = static_counts(r)
+        FLOPs,BYTES,SH,WS,AI,pat,has_divergence,atomic_ops = static_counts(r)
         r["FLOPs"] = str(FLOPs)
         r["BYTES"] = str(BYTES)
         r["shared_bytes"] = str(SH)
         r["working_set_bytes"] = str(WS)
         r["arithmetic_intensity"] = f"{AI:.6f}"
         r["mem_pattern"] = pat
+        r["has_branch_divergence"] = str(has_divergence)
+        r["atomic_ops_count"] = str(atomic_ops)
         # Determine size_kind
         rows = I(r.get("rows"))
         cols = I(r.get("cols"))
@@ -307,10 +356,19 @@ def main():
     fl = read_ceiling(gemm_out,   "SUSTAINED_COMPUTE_GFLOPS")
     warp = P.get("warpSize", 32) or 32
 
+    # Get GPU specs from lookup table
+    device_name = P["device_name"]
+    specs = GPU_SPECS.get(device_name, {})
+    architecture = ARCHITECTURE_MAP.get((P["cc_major"], P.get("cc_minor", 0)), "Unknown")
+    compute_capability = f"{P['cc_major']}.{P.get('cc_minor', 0)}"
+    peak_gflops = specs.get("peak_gflops_fp32", 0)
+    peak_bandwidth = specs.get("peak_bandwidth_gbps", 0)
+
     for r in agg:
         r.update({
             "gpu_device_name": P["device_name"],
-            "gpu_cc_major": str(P["cc_major"]),
+            "gpu_architecture": architecture,
+            "gpu_compute_capability": compute_capability,
             "gpu_sms": str(P["multiProcessorCount"]),
             "gpu_max_threads_per_sm": str(P["maxThreadsPerMultiProcessor"]),
             "gpu_max_blocks_per_sm": str(P["maxBlocksPerMultiProcessor"]),
@@ -318,6 +376,8 @@ def main():
             "gpu_shared_mem_per_sm": str(P["sharedMemPerMultiprocessor"]),
             "gpu_l2_bytes": str(P["l2CacheSizeBytes"]),
             "gpu_warp_size": str(P["warpSize"]),
+            "peak_theoretical_gflops": str(peak_gflops),
+            "peak_theoretical_bandwidth_gbps": str(peak_bandwidth),
             "calibrated_mem_bandwidth_gbps": f"{bw:.2f}",
             "calibrated_compute_gflops": f"{fl:.2f}",
         })
@@ -333,18 +393,30 @@ def main():
             r["achieved_bandwidth_gbps"] = "0.00"
         add_T1_and_speedup(r, fl, bw, warp)
 
-    # 4) write final CSV (removed useless columns: args, device_name, block_x/y/z, grid_x/y/z, warmup, reps, trials, iters, conv_padding, gpu_cc_minor)
+    # 4) write final CSV with all metrics (11/11 kernel metrics + 13/13 GPU metrics)
     flds = [
+        # Kernel identification
         "kernel","regs","shmem",
+        # Launch configuration
         "block","grid_blocks",
+        # Performance results
         "mean_ms","std_ms",
+        # Problem sizes
         "N","rows","cols","H","W","matN","size_kind",
-        "FLOPs","BYTES","shared_bytes","working_set_bytes","arithmetic_intensity","mem_pattern",
-        "gpu_device_name","gpu_cc_major","gpu_sms",
-        "gpu_max_threads_per_sm","gpu_max_blocks_per_sm","gpu_regs_per_sm","gpu_shared_mem_per_sm",
-        "gpu_l2_bytes","gpu_warp_size",
+        # Kernel metrics (11 total)
+        "FLOPs","BYTES","shared_bytes","working_set_bytes",
+        "arithmetic_intensity","mem_pattern",
+        "has_branch_divergence","atomic_ops_count",
+        # GPU hardware specs (13 total)
+        "gpu_device_name","gpu_architecture","gpu_compute_capability",
+        "gpu_sms","gpu_max_threads_per_sm","gpu_max_blocks_per_sm",
+        "gpu_regs_per_sm","gpu_shared_mem_per_sm","gpu_l2_bytes","gpu_warp_size",
+        # GPU performance limits
+        "peak_theoretical_gflops","peak_theoretical_bandwidth_gbps",
         "calibrated_mem_bandwidth_gbps","calibrated_compute_gflops",
+        # Achieved performance
         "achieved_bandwidth_gbps","achieved_compute_gflops",
+        # Performance models
         "T1_model_ms","speedup_model"
     ]
     with open(final_csv, "w", newline="") as f:
