@@ -6,9 +6,26 @@ rm -f data/trials_*__titanv.csv
 
 echo "=== build runner for sm_70 (Volta / TITAN V) ==="
 mkdir -p bin data
-nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -arch=sm_70 -DTILE=32 \
-  -o bin/runner runner/main.cu 2> data/ptxas_titanv.log
-test -x bin/runner
+
+# Try different architecture specifications for Volta
+# Some CUDA versions use compute_70 instead of sm_70
+if nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -arch=sm_70 -DTILE=32 \
+  -o bin/runner runner/main.cu 2> data/ptxas_titanv.log; then
+  echo "✓ Compiled with sm_70"
+elif nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -arch=compute_70 -DTILE=32 \
+  -o bin/runner runner/main.cu 2> data/ptxas_titanv.log; then
+  echo "✓ Compiled with compute_70"
+elif nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -gencode arch=compute_70,code=sm_70 -DTILE=32 \
+  -o bin/runner runner/main.cu 2> data/ptxas_titanv.log; then
+  echo "✓ Compiled with gencode arch=compute_70,code=sm_70"
+else
+  echo "ERROR: Failed to compile runner for Volta architecture"
+  echo "See data/ptxas_titanv.log for details"
+  cat data/ptxas_titanv.log
+  exit 1
+fi
+
+test -x bin/runner || { echo "ERROR: bin/runner not executable"; exit 1; }
 
 # Helper the suite relies on
 chmod +x scripts/run_trials.sh

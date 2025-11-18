@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Allow GPU selection via environment variable
+# Usage: CUDA_VISIBLE_DEVICES=0 ./scripts/run_titanv_full.sh
+# or:    GPU_ID=1 ./scripts/run_titanv_full.sh
+if [ -n "${GPU_ID:-}" ]; then
+    export CUDA_VISIBLE_DEVICES="$GPU_ID"
+    echo "=== Using GPU $GPU_ID ==="
+elif [ -n "${CUDA_VISIBLE_DEVICES:-}" ]; then
+    echo "=== Using GPU(s): $CUDA_VISIBLE_DEVICES ==="
+else
+    echo "=== Using default GPU (set GPU_ID=N or CUDA_VISIBLE_DEVICES=N to select specific GPU) ==="
+fi
+
+nvidia-smi --query-gpu=index,name,memory.total,memory.used,utilization.gpu --format=csv
+
+echo ""
 echo "=== 0) Clean old TITAN V data ==="
 rm -f data/trials_*__titanv.csv data/runs_titanv*.csv
 
@@ -42,7 +57,7 @@ echo ""
 
 echo "=== 4) Generate device calibration JSON ==="
 python3 - <<'PYEOF'
-import re, json
+import re, json, sys
 
 # Read props
 props = {}
@@ -65,6 +80,32 @@ with open('data/gemm_cublas_titanv.out') as f:
     for ln in f:
         if ln.startswith('SUSTAINED_COMPUTE_GFLOPS='):
             gemm_gflops = float(ln.split('=')[1])
+
+# Validate calibration values for TITAN V
+print(f"Validating calibration values...")
+print(f"  Memory bandwidth: {stream_bw:.2f} GB/s")
+print(f"  Compute throughput: {gemm_gflops:.2f} GFLOPS")
+
+errors = []
+if not (400 < stream_bw < 800):
+    errors.append(f"Memory bandwidth {stream_bw:.2f} GB/s is outside expected range (400-800 GB/s)")
+if not (8000 < gemm_gflops < 20000):
+    errors.append(f"Compute throughput {gemm_gflops:.2f} GFLOPS is outside expected range (8000-20000 GFLOPS)")
+
+if errors:
+    print("\n❌ ERROR: Calibration values are suspicious!")
+    for err in errors:
+        print(f"  - {err}")
+    print("\nExpected values for TITAN V:")
+    print("  - Memory bandwidth: ~550-650 GB/s")
+    print("  - Compute: ~13000-15000 GFLOPS (FP32)")
+    print("\nPlease check:")
+    print("  1. data/stream_like_titanv.out")
+    print("  2. data/gemm_cublas_titanv.out")
+    print("  3. Are you running on the correct GPU?")
+    sys.exit(1)
+
+print("✓ Calibration values look reasonable")
 
 # Create calibration JSON
 calib = {
