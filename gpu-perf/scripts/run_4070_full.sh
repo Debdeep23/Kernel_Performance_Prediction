@@ -98,28 +98,10 @@ for f in data/trials_*__4070.csv; do
   fi
 done
 
-echo "=== 7) Aggregate → runs_4070.csv ==="
-python3 scripts/aggregate_trials.py data/trials_*__4070.csv > data/runs_4070.csv
+echo "=== 7) Generate final dataset with iters → runs_4070_final.csv ==="
+python3 scripts/make_final_4070.py
 
-echo "=== 8) Static counts → runs_4070_with_counts.csv ==="
-python3 scripts/static_counts.py data/runs_4070.csv data/runs_4070_with_counts.csv
-
-echo "=== 9) Enrich with GPU metrics → runs_4070_enriched.csv ==="
-python3 scripts/enrich_with_gpu_metrics.py \
-  data/runs_4070_with_counts.csv \
-  data/props_4070.out \
-  data/stream_like_4070.out \
-  data/gemm_cublas_4070.out \
-  data/runs_4070_enriched.csv
-
-echo "=== 10) Add single-thread baseline → runs_4070_final.csv ==="
-python3 scripts/add_singlethread_baseline.py \
-  data/runs_4070_enriched.csv \
-  data/device_calibration_4070.json \
-  data/runs_4070_final.csv \
-  32
-
-echo "=== 11) Peek ==="
+echo "=== 8) Peek ==="
 head -5 data/runs_4070_final.csv
 
 echo ""
@@ -133,10 +115,7 @@ echo "  - data/stream_like_4070.out"
 echo "  - data/gemm_cublas_4070.out"
 echo "  - data/device_calibration_4070.json"
 echo "  - data/trials_*__4070.csv (16 files)"
-echo "  - data/runs_4070.csv"
-echo "  - data/runs_4070_with_counts.csv"
-echo "  - data/runs_4070_enriched.csv"
-echo "  - data/runs_4070_final.csv"
+echo "  - data/runs_4070_final.csv (complete dataset with iters)"
 echo ""
 TOTAL_ROWS=$(wc -l < data/runs_4070_final.csv)
 TOTAL_COLS=$(head -1 data/runs_4070_final.csv | tr ',' '\n' | wc -l)
