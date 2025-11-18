@@ -29,14 +29,14 @@ cd calibration
 # Force rebuild by removing old binaries
 rm -f ../bin/props_titanv ../bin/stream_like_titanv ../bin/gemm_cublas_titanv
 
-echo "Building props (no -arch flag, using JIT compilation)..."
-nvcc -o ../bin/props_titanv props.cu
+echo "Building props (using -arch=native to auto-detect GPU)..."
+nvcc -arch=native -o ../bin/props_titanv props.cu
 
-echo "Building stream_like (no -arch flag, using JIT compilation)..."
-nvcc -o ../bin/stream_like_titanv stream_like.cu
+echo "Building stream_like (using -arch=native to auto-detect GPU)..."
+nvcc -arch=native -o ../bin/stream_like_titanv stream_like.cu
 
-echo "Building gemm_cublas (no -arch flag, using JIT compilation)..."
-nvcc -o ../bin/gemm_cublas_titanv gemm_cublas.cu -lcublas
+echo "Building gemm_cublas (using -arch=native to auto-detect GPU)..."
+nvcc -arch=native -o ../bin/gemm_cublas_titanv gemm_cublas.cu -lcublas
 
 cd ..
 
