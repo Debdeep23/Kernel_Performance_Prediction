@@ -13,6 +13,11 @@ def I(x):
     try: return int(str(x).strip())
     except: return 0
 
+def extract_iters_from_args(args):
+    """Extract --iters N from args string"""
+    m = re.search(r'--iters\s+(\d+)', args)
+    return int(m.group(1)) if m else 0
+
 def grab_last_number(pattern, text):
     out = None
     for ln in text.splitlines():
@@ -70,10 +75,12 @@ def static_counts(row):
     N    = I(row.get("N", ""))
     rows = I(row.get("rows", ""))
     cols = I(row.get("cols", ""))
-    H    = I(row.get("H", ""))
-    W    = I(row.get("W", ""))
-    matN = I(row.get("matN", ""))
     iters= I(row.get("iters", ""))
+
+    # Derive matN and H/W from normalized rows/cols
+    matN = rows if (rows > 0 and rows == cols) else 0
+    H = rows
+    W = cols
 
     bx = I(row.get("block_x","1")); by = I(row.get("block_y","1")); bz = I(row.get("block_z","1"))
     gx = I(row.get("grid_x","1"));  gy = I(row.get("grid_y","1"));  gz = I(row.get("grid_z","1"))
@@ -228,6 +235,52 @@ def aggregate_trials():
         row["trials"] = len(times)
         row["mean_ms"] = f"{(sum(times)/len(times)):.6f}"
         row["std_ms"]  = f"{(stat.pstdev(times) if len(times)>1 else 0.0):.6f}"
+
+        # Extract iters from args if not already present
+        if not row.get("iters") or row["iters"] == "":
+            row["iters"] = str(extract_iters_from_args(row.get("args", "")))
+
+        # Normalize sizes: make N/rows/cols mutually exclusive
+        N = I(row.get("N", ""))
+        rows_val = I(row.get("rows", ""))
+        cols_val = I(row.get("cols", ""))
+        matN = I(row.get("matN", ""))
+        H = I(row.get("H", ""))
+        W = I(row.get("W", ""))
+
+        # Derive final N, rows, cols
+        if matN > 0:
+            # Matrix kernels: use rows=cols=matN
+            row["N"] = ""
+            row["rows"] = str(matN)
+            row["cols"] = str(matN)
+            row["size_kind"] = "rows_cols"
+        elif H > 0 and W > 0:
+            # Conv kernels: use rows=H, cols=W
+            row["N"] = ""
+            row["rows"] = str(H)
+            row["cols"] = str(W)
+            row["size_kind"] = "rows_cols"
+        elif rows_val > 0 and cols_val > 1:
+            # 2D kernels: keep rows/cols
+            row["N"] = ""
+            row["rows"] = str(rows_val)
+            row["cols"] = str(cols_val)
+            row["size_kind"] = "rows_cols"
+        else:
+            # 1D kernels: consolidate to N only
+            if N > 0:
+                problem_size = N
+            elif rows_val > 0:
+                problem_size = rows_val * max(1, cols_val)
+            else:
+                problem_size = 0
+
+            row["N"] = str(problem_size) if problem_size > 0 else ""
+            row["rows"] = "0"
+            row["cols"] = "0"
+            row["size_kind"] = "N"
+
         out.append(row)
 
     return out
@@ -251,24 +304,18 @@ def main():
     peak_theoretical_gflops = FLOP_sus
     peak_theoretical_gbps   = BW_sus
 
-    # 3) write final CSV
+    # 3) write final CSV with updated schema (matches current runs_4070_final.csv)
     fieldnames = [
-        # measured + launch shape
-        "kernel","args","device_name","regs","shmem",
-        "block_x","block_y","block_z","grid_x","grid_y","grid_z",
-        "warmup","reps","trials","mean_ms","std_ms",
-        # size family (only one set will be non-empty per kernel)
-        "N","rows","cols","matN","H","W","block","grid_blocks",
-        # static counts
+        "kernel","regs","shmem","mean_ms","std_ms",
+        "N","rows","cols","iters",
+        "block","grid_blocks","size_kind",
         "FLOPs","BYTES","arithmetic_intensity","working_set_bytes","shared_bytes","mem_pattern",
-        # GPU metrics
-        "gpu_name","compute_capability","sm_count","warp_size",
-        "max_threads_per_sm","max_blocks_per_sm",
-        "registers_per_sm","shared_mem_per_sm",
-        "peak_theoretical_gflops","peak_theoretical_gbps",
-        "sustained_compute_gflops","sustained_mem_bandwidth_gbps",
-        "gpu_l2_bytes","estimated_l2_bytes",
-        # single-thread baseline + speedup
+        "gpu_device_name","gpu_cc_major","gpu_sms",
+        "gpu_max_threads_per_sm","gpu_max_blocks_per_sm",
+        "gpu_regs_per_sm","gpu_shared_mem_per_sm",
+        "gpu_l2_bytes","gpu_warp_size",
+        "calibrated_mem_bandwidth_gbps","calibrated_compute_gflops",
+        "achieved_bandwidth_gbps","achieved_compute_gflops",
         "T1_model_ms","speedup_model"
     ]
 
@@ -280,22 +327,6 @@ def main():
             # static counts
             fl, gb, ai, ws, pat, shb = static_counts(r)
 
-            # gpu metrics
-            r["gpu_name"]            = r.get("device_name","")
-            r["compute_capability"]  = f'{P.get("major","")}.{P.get("minor","")}'
-            r["sm_count"]            = P.get("multiProcessorCount","")
-            r["warp_size"]           = P.get("warpSize","")
-            r["max_threads_per_sm"]  = P.get("maxThreadsPerMultiProcessor","")
-            r["max_blocks_per_sm"]   = P.get("maxBlocksPerMultiProcessor","")
-            r["registers_per_sm"]    = P.get("regsPerMultiprocessor","")
-            r["shared_mem_per_sm"]   = P.get("sharedMemPerMultiprocessor","")
-            r["peak_theoretical_gflops"]  = peak_theoretical_gflops
-            r["peak_theoretical_gbps"]    = peak_theoretical_gbps
-            r["sustained_compute_gflops"] = FLOP_sus
-            r["sustained_mem_bandwidth_gbps"] = BW_sus
-            r["gpu_l2_bytes"]        = l2_bytes
-            r["estimated_l2_bytes"]  = min(int(gb), 2*l2_bytes) if l2_bytes>0 else int(gb)
-
             # static columns
             r["FLOPs"]                 = fl
             r["BYTES"]                 = gb
@@ -304,11 +335,32 @@ def main():
             r["shared_bytes"]          = shb
             r["mem_pattern"]           = pat
 
+            # gpu metrics (updated field names to match schema)
+            r["gpu_device_name"]       = r.get("device_name","")
+            r["gpu_cc_major"]          = P.get("major","")
+            r["gpu_sms"]               = P.get("multiProcessorCount","")
+            r["gpu_warp_size"]         = P.get("warpSize","")
+            r["gpu_max_threads_per_sm"] = P.get("maxThreadsPerMultiProcessor","")
+            r["gpu_max_blocks_per_sm"]  = P.get("maxBlocksPerMultiProcessor","")
+            r["gpu_regs_per_sm"]       = P.get("regsPerMultiprocessor","")
+            r["gpu_shared_mem_per_sm"] = P.get("sharedMemPerMultiprocessor","")
+            r["gpu_l2_bytes"]          = l2_bytes
+            r["calibrated_compute_gflops"] = f"{FLOP_sus:.2f}"
+            r["calibrated_mem_bandwidth_gbps"] = f"{BW_sus:.2f}"
+
+            # achieved metrics
+            mean_ms = F(r.get("mean_ms","0"))
+            if mean_ms > 0:
+                r["achieved_compute_gflops"] = f"{(fl/(mean_ms/1000.0)/1e9):.2f}"
+                r["achieved_bandwidth_gbps"] = f"{(gb/(mean_ms/1000.0)/1e9):.2f}"
+            else:
+                r["achieved_compute_gflops"] = "0.00"
+                r["achieved_bandwidth_gbps"] = "0.00"
+
             # single-thread baseline & speedup
             peak1_gflops = FLOP_sus / warp_size if FLOP_sus>0 else 0.0
             peak1_gbps   = BW_sus   / warp_size if BW_sus>0   else 0.0
             T1 = roofline_time_ms(fl, gb, peak1_gflops, peak1_gbps)
-            mean_ms = F(r.get("mean_ms","0"))
             r["T1_model_ms"]   = "" if math.isnan(T1) else f"{T1:.6f}"
             r["speedup_model"] = "" if math.isnan(T1) or mean_ms<=0 else f"{(T1/mean_ms):.2f}"
 
