@@ -24,13 +24,13 @@ mkdir -p bin data
 cd calibration
 
 echo "Building props..."
-nvcc -o ../bin/props_titanv props.cu
+nvcc -arch=sm_75 -o ../bin/props_titanv props.cu
 
 echo "Building stream_like..."
-nvcc -o ../bin/stream_like_titanv stream_like.cu
+nvcc -arch=sm_75 -o ../bin/stream_like_titanv stream_like.cu
 
 echo "Building gemm_cublas..."
-nvcc -o ../bin/gemm_cublas_titanv gemm_cublas.cu -lcublas
+nvcc -arch=sm_75 -o ../bin/gemm_cublas_titanv gemm_cublas.cu -lcublas
 
 cd ..
 
