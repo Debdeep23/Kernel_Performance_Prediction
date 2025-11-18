@@ -2,6 +2,9 @@
 # Extract metrics from ncu binary reports to CSV format
 # Usage: ./export_ncu_metrics.sh
 
+# Save the repo root directory
+REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+
 PROFILE_DIR="data/profiling_4070"
 OUTPUT_DIR="$PROFILE_DIR/csv_exports"
 
@@ -38,6 +41,7 @@ echo "============================================"
 echo "CSV files saved to: $OUTPUT_DIR"
 echo ""
 echo "Combining all CSVs into one file..."
+cd "$REPO_ROOT"
 python3 scripts/combine_ncu_results.py
 
 echo ""
