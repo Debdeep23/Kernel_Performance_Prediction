@@ -22,32 +22,32 @@ def first_missing_add(fields, name):
 
 def size_from_row(r):
     """
-    Normalize sizes:
-      - Prefer explicit N if present
-      - Else infer N from rows*cols when cols>1, otherwise N=rows
-      - For convs, also set H=W from rows/cols if absent
+    Normalize sizes - mutually exclusive:
+      - For 1D kernels: only N is populated, rows/cols are 0
+      - For 2D kernels: only rows/cols are populated, N is 0
     Returns (size_kind, N, rows, cols)
     """
     rows = I(r.get("rows"))
     cols = I(r.get("cols"))
     N    = I(r.get("N"))  # may be missing in input
 
-    # Fallbacks: unify to either N or rows/cols
-    if N == 0:
-        if rows > 0 and cols > 1:
-            N = rows * cols
-        elif rows > 0 and cols <= 1:
-            N = rows
-
-    # If both rows and cols are zero but N > 0, prefer 1D representation
-    if rows == 0 and cols == 0 and N > 0:
-        rows, cols = N, 1
-
-    # Choose size_kind
-    if rows > 0 and cols > 0 and cols != 1:
+    # Determine if this is 1D or 2D based on what's populated
+    # 2D: rows > 0 and cols > 1 (true 2D matrix)
+    # 1D: everything else
+    if rows > 0 and cols > 1:
+        # This is a 2D kernel (transpose, matmul, conv)
         size_kind = "rows_cols"
+        N = 0  # Clear N for 2D kernels
     else:
+        # This is a 1D kernel
         size_kind = "N"
+        # Consolidate everything into N
+        if N == 0:
+            if rows > 0:
+                N = rows * max(1, cols)  # rows * cols if cols>0, else just rows
+        # Clear rows/cols for 1D kernels
+        rows = 0
+        cols = 0
 
     return size_kind, N, rows, cols
 

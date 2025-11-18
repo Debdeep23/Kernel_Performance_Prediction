@@ -86,14 +86,21 @@ def pick_size_family(row):
     if N == 0 and rows > 0:
         N = rows if cols <= 1 else rows * cols
 
-    # emit simplified family (just N, rows, cols)
+    # Mutually exclusive: either N (1D) or rows/cols (2D), never both
     out = {"N":"", "rows":"", "cols":""}
-    # Only use rows/cols for true 2D cases (cols > 1)
-    # For 1D cases (cols <= 1), use N instead
+
+    # 2D kernels: rows > 0 and cols > 1
     if rows > 0 and cols > 1:
-        out["rows"], out["cols"] = str(rows), str(cols)
-    elif N > 0:
-        out["N"] = str(N)
+        # 2D kernel: only populate rows/cols
+        out["rows"] = str(rows)
+        out["cols"] = str(cols)
+    else:
+        # 1D kernel: consolidate into N only
+        if N == 0 and rows > 0:
+            N = rows * max(1, cols)
+        if N > 0:
+            out["N"] = str(N)
+
     return out
 
 def sane_block_grid(row):
