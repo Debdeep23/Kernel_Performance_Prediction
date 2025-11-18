@@ -58,39 +58,29 @@ def clean_int_field(s):
 
 def kv_from_file(path):
     kv = {}
-    pat = re.compile(r'^([A-Za-z0-9_]+)=(.*)$')
     with open(path) as f:
         for ln in f:
             ln = ln.strip()
-            m = pat.match(ln)
-            if not m: continue
-            k, v = m.group(1), m.group(2)
-            kv[k] = v
+            # Handle both "key=value" per line and "major=7 minor=5" on one line
+            for token in ln.split():
+                if '=' in token:
+                    k, v = token.split('=', 1)
+                    kv[k] = v
     return kv
 
 # ---------- size + shape sanitation ----------
 def pick_size_family(row):
     rows, cols = I(row.get("rows")), I(row.get("cols"))
     N    = I(row.get("N"))
-    H, W = I(row.get("H")), I(row.get("W"))
-    matN = I(row.get("matN"))
 
     # fallbacks: accept whatever the trial used
     if N == 0 and rows > 0:
         N = rows if cols <= 1 else rows * cols
-    if H == 0 and W == 0 and rows > 0 and cols > 0:
-        H, W = rows, cols
-    if matN == 0 and rows > 0 and (cols == 0 or rows == cols):
-        matN = rows
 
-    # emit exactly ONE family
-    out = {"N":"", "rows":"", "cols":"", "H":"", "W":"", "matN":""}
+    # emit simplified family (just N, rows, cols)
+    out = {"N":"", "rows":"", "cols":""}
     if rows > 0 and cols > 0:
         out["rows"], out["cols"] = str(rows), str(cols)
-    elif matN > 0:
-        out["matN"] = str(matN)
-    elif H > 0 and W > 0:
-        out["H"], out["W"] = str(H), str(W)
     elif N > 0:
         out["N"] = str(N)
     return out
@@ -110,25 +100,28 @@ def static_counts(row):
     # sizes with fallbacks
     rows, cols = I(row.get("rows")), I(row.get("cols"))
     N    = I(row.get("N"))
-    H, W = I(row.get("H")), I(row.get("W"))
-    matN = I(row.get("matN"))
     iters = I(row.get("iters"))
     blk   = max(1, I(row.get("block")))
 
+    # Derive N from rows/cols if needed
     if N == 0 and rows > 0:
         N = rows if cols <= 1 else rows * cols
-    if H == 0 and W == 0 and rows > 0 and cols > 0:
-        H, W = rows, cols
-    if matN == 0 and rows > 0 and (cols == 0 or rows == cols):
-        matN = rows
 
-    FLOPs = 0; BYTES = 0; SH = 0; WS = 0; pat = "coalesced"
+    # For matmul kernels, derive matN from rows (assumes square matrices)
+    matN = rows if rows > 0 and rows == cols else 0
 
-    if k in ("vector_add","vector_add_divergent"):
+    FLOPs = 0; BYTES = 0; WS = 0; pat = "coalesced"
+
+    if k == "vector_add":
         FLOPs = N
         BYTES = 3*N*4
         WS    = BYTES
         pat   = "coalesced"
+    elif k == "vector_add_divergent":
+        FLOPs = N
+        BYTES = 3*N*4
+        WS    = BYTES
+        pat   = "divergent"
     elif k == "saxpy":
         FLOPs = 2*N
         BYTES = 3*N*4
@@ -146,7 +139,6 @@ def static_counts(row):
     elif k == "shared_transpose":
         elems = rows*cols
         BYTES = 2*elems*4
-        SH    = elems*4
         WS    = BYTES
         pat   = "transpose_tiled"
     elif k == "matmul_naive":
@@ -157,21 +149,18 @@ def static_counts(row):
     elif k == "matmul_tiled":
         FLOPs = 2*matN*matN*matN
         BYTES = 4*(matN*matN*3)
-        SH    = 2*matN*matN*4
         WS    = BYTES
         pat   = "matmul_tiled"
     elif k == "reduce_sum":
         FLOPs   = max(0, N-1)
         partial = max(1, (N // (2*blk))) * 4
         BYTES   = N*4 + partial + 4
-        SH      = blk*4
         WS      = N*4
         pat     = "shared_reduction"
     elif k == "dot_product":
         FLOPs   = 2*N
         partial = max(1, (N // (2*blk))) * 4
         BYTES   = 2*N*4 + partial + 4
-        SH      = blk*4
         WS      = 2*N*4
         pat     = "shared_reduction"
     elif k == "histogram":
@@ -187,27 +176,25 @@ def static_counts(row):
         WS    = 4
         pat   = "atomics_hotspot"
     elif k == "conv2d_3x3":
-        elems = max(1, rows*cols if rows*cols>0 else H*W)
+        elems = max(1, rows*cols)
         FLOPs = 18 * elems
         BYTES = 2  * elems * 4
         WS    = elems * 4
         pat   = "stencil_3x3"
     elif k == "conv2d_7x7":
-        elems = max(1, rows*cols if rows*cols>0 else H*W)
+        elems = max(1, rows*cols)
         FLOPs = 98 * elems
         BYTES = 2  * elems * 4
         WS    = elems * 4
         pat   = "stencil_7x7"
     elif k == "shared_bank_conflict":
-        SH  = max(1, blk)*4
-        WS  = SH
+        WS  = 4096  # shared memory only kernel
         pat = "smem_bank_conflict"
     else:
         # fallback: try not to emit zeros if we can infer an element count
         n = 0
         if rows>0 and cols>0: n = rows*cols
         elif N>0: n = N
-        elif H>0 and W>0: n = H*W
         BYTES = 2*n*4 if n>0 else 0
         WS    = BYTES
         pat   = "unknown"
@@ -225,7 +212,7 @@ def static_counts(row):
     elif k == "histogram":
         atomic_ops = N
 
-    return FLOPs, BYTES, SH, WS, AI, pat, has_divergence, atomic_ops
+    return FLOPs, BYTES, WS, AI, pat, has_divergence, atomic_ops
 
 # ---------- T1 + speedup ----------
 def add_T1_and_speedup(row, peak_gflops, peak_gbps, warp_size):
@@ -293,7 +280,7 @@ def aggregate_trials(trial_glob):
                     r["kernel"], r["args"], r["regs"], r["shmem"], r["device_name"],
                     r["block_x"], r["block_y"], r["block_z"], r["grid_x"], r["grid_y"], r["grid_z"],
                     r.get("warmup",""), r.get("reps",""),
-                    r.get("N",""), r.get("rows",""), r.get("cols",""), r.get("H",""), r.get("W",""), r.get("matN",""),
+                    r.get("N",""), r.get("rows",""), r.get("cols",""),
                     r.get("iters","")
                 )
                 groups.setdefault(key, []).append(F(r.get("time_ms"), 0.0))
@@ -305,7 +292,7 @@ def aggregate_trials(trial_glob):
         std_ms  = statistics.pstdev(times) if len(times)>1 else 0.0
         (kernel,args,regs,shmem,device_name,
          bx,by,bz,gx,gy,gz,warmup,reps,
-         N,rows,cols,H,W,matN,iters) = key
+         N,rows,cols,iters) = key
         out.append({
             "kernel": kernel, "args": args, "regs": regs, "shmem": shmem, "device_name": device_name,
             "block_x": bx, "block_y": by, "block_z": bz,
@@ -314,7 +301,7 @@ def aggregate_trials(trial_glob):
             "trials": str(len(times)),
             "mean_ms": f"{mean_ms:.6f}",
             "std_ms": f"{std_ms:.6f}",
-            "N": N, "rows": rows, "cols": cols, "H": H, "W": W, "matN": matN,
+            "N": N, "rows": rows, "cols": cols,
             "iters": iters,
             "block": str(I(bx)*I(by)*I(bz)),
             "grid_blocks": str(I(gx)*I(gy)*I(gz)),
@@ -333,10 +320,10 @@ def main():
 
     # 2) per-kernel static counts + size_kind
     for r in agg:
-        FLOPs,BYTES,SH,WS,AI,pat,has_divergence,atomic_ops = static_counts(r)
+        FLOPs,BYTES,WS,AI,pat,has_divergence,atomic_ops = static_counts(r)
         r["FLOPs"] = str(FLOPs)
         r["BYTES"] = str(BYTES)
-        r["shared_bytes"] = str(SH)
+        r["shared_bytes"] = r.get("shmem", "0")  # Use actual shmem from kernel launch
         r["working_set_bytes"] = str(WS)
         r["arithmetic_intensity"] = f"{AI:.6f}"
         r["mem_pattern"] = pat
@@ -402,7 +389,7 @@ def main():
         # Performance results
         "mean_ms","std_ms",
         # Problem sizes
-        "N","rows","cols","H","W","matN","size_kind",
+        "N","rows","cols","iters","size_kind",
         # Kernel metrics (11 total)
         "FLOPs","BYTES","shared_bytes","working_set_bytes",
         "arithmetic_intensity","mem_pattern",
