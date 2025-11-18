@@ -17,11 +17,16 @@ NCU_REPORT="${OUTPUT_DIR}/ncu_${KERNEL}_report.ncu-rep"
 NCU_TEXT="${OUTPUT_DIR}/ncu_${KERNEL}_details.txt"
 NCU_CSV="${OUTPUT_DIR}/ncu_${KERNEL}_metrics.csv"
 
+# Reduce warmup/reps for profiling (ncu runs kernels multiple times internally)
+PROFILE_ARGS=$(echo "$ARGSTR" | sed 's/--warmup [0-9]*/--warmup 1/; s/--reps [0-9]*/--reps 1/')
+
 # Full detailed profiling with ncu-rep file for GUI analysis
 echo "Running comprehensive profiling (this may take a while)..."
 ncu --set full \
+    --target-processes all \
+    --launch-count 1 \
     --export "$NCU_REPORT" \
-    bin/runner --kernel "$KERNEL" $ARGSTR
+    bin/runner --kernel "$KERNEL" $PROFILE_ARGS
 
 echo "Full report saved to: $NCU_REPORT"
 echo "(Open with 'ncu-ui $NCU_REPORT' for GUI analysis)"
@@ -29,8 +34,10 @@ echo "(Open with 'ncu-ui $NCU_REPORT' for GUI analysis)"
 # Generate detailed text output
 echo "Generating detailed text report..."
 ncu --set detailed \
+    --target-processes all \
+    --launch-count 1 \
     --page details \
-    bin/runner --kernel "$KERNEL" $ARGSTR \
+    bin/runner --kernel "$KERNEL" $PROFILE_ARGS \
     > "$NCU_TEXT" 2>&1
 
 echo "Detailed text saved to: $NCU_TEXT"
@@ -38,6 +45,8 @@ echo "Detailed text saved to: $NCU_TEXT"
 # Extract specific metrics to CSV for easy analysis
 echo "Collecting specific metrics to CSV..."
 ncu --csv \
+    --target-processes all \
+    --launch-count 1 \
     --metrics \
 gpu__time_duration.sum,\
 sm__throughput.avg.pct_of_peak_sustained_elapsed,\
@@ -59,7 +68,7 @@ sm__pipe_fma_cycles_active.avg.pct_of_peak_sustained_active,\
 l1tex__data_pipe_lsu_wavefronts_mem_shared_op_ld.sum,\
 l1tex__data_pipe_lsu_wavefronts_mem_shared_op_st.sum,\
 smsp__inst_executed.avg.per_cycle_active \
-    bin/runner --kernel "$KERNEL" $ARGSTR \
+    bin/runner --kernel "$KERNEL" $PROFILE_ARGS \
     > "$NCU_CSV" 2>&1
 
 echo "CSV metrics saved to: $NCU_CSV"

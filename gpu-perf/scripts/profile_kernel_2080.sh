@@ -85,24 +85,36 @@ if [[ "$TOOL" == "ncu" ]]; then
     NCU_TEXT="${OUTPUT_DIR}/ncu_${KERNEL}_details.txt"
     NCU_CSV="${OUTPUT_DIR}/ncu_${KERNEL}_metrics.csv"
 
+    # Modify args to reduce profiling overhead (ncu is slow)
+    # Extract current args and reduce warmup/reps for profiling
+    PROFILE_ARGS=$(echo "$ARGSTR" | sed 's/--warmup [0-9]*/--warmup 1/; s/--reps [0-9]*/--reps 1/')
+
     # Full detailed profiling
+    # Use --target-processes all to ensure we capture the kernel
+    # Use --launch-count 1 to profile just one kernel launch (faster)
     ncu --set full \
+        --target-processes all \
+        --launch-count 1 \
         --export "$NCU_REPORT" \
-        bin/runner --kernel "$KERNEL" $ARGSTR
+        bin/runner --kernel "$KERNEL" $PROFILE_ARGS
 
     echo "Full report: $NCU_REPORT"
     echo "(Open with 'ncu-ui $NCU_REPORT' for GUI)"
 
     # Generate text output with key metrics
     ncu --set detailed \
+        --target-processes all \
+        --launch-count 1 \
         --page details \
-        bin/runner --kernel "$KERNEL" $ARGSTR \
+        bin/runner --kernel "$KERNEL" $PROFILE_ARGS \
         > "$NCU_TEXT" 2>&1 || true
 
     echo "Details: $NCU_TEXT"
 
     # Extract CSV metrics
     ncu --csv \
+        --target-processes all \
+        --launch-count 1 \
         --metrics \
 gpu__time_duration.sum,\
 sm__throughput.avg.pct_of_peak_sustained_elapsed,\
@@ -111,7 +123,7 @@ l1tex__throughput.avg.pct_of_peak_sustained_elapsed,\
 gpu__compute_memory_throughput.avg.pct_of_peak_sustained_elapsed,\
 sm__warps_active.avg.pct_of_peak_sustained_active,\
 gpu__dram_throughput.avg.pct_of_peak_sustained_elapsed \
-        bin/runner --kernel "$KERNEL" $ARGSTR \
+        bin/runner --kernel "$KERNEL" $PROFILE_ARGS \
         > "$NCU_CSV" 2>&1 || true
 
     echo "Metrics CSV: $NCU_CSV"
