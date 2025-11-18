@@ -72,25 +72,15 @@ def kv_from_file(path):
 def pick_size_family(row):
     rows, cols = I(row.get("rows")), I(row.get("cols"))
     N    = I(row.get("N"))
-    H, W = I(row.get("H")), I(row.get("W"))
-    matN = I(row.get("matN"))
 
     # fallbacks: accept whatever the trial used
     if N == 0 and rows > 0:
         N = rows if cols <= 1 else rows * cols
-    if H == 0 and W == 0 and rows > 0 and cols > 0:
-        H, W = rows, cols
-    if matN == 0 and rows > 0 and (cols == 0 or rows == cols):
-        matN = rows
 
-    # emit exactly ONE family
-    out = {"N":"", "rows":"", "cols":"", "H":"", "W":"", "matN":""}
+    # emit simplified family (just N, rows, cols)
+    out = {"N":"", "rows":"", "cols":""}
     if rows > 0 and cols > 0:
         out["rows"], out["cols"] = str(rows), str(cols)
-    elif matN > 0:
-        out["matN"] = str(matN)
-    elif H > 0 and W > 0:
-        out["H"], out["W"] = str(H), str(W)
     elif N > 0:
         out["N"] = str(N)
     return out
@@ -110,17 +100,15 @@ def static_counts(row):
     # sizes with fallbacks
     rows, cols = I(row.get("rows")), I(row.get("cols"))
     N    = I(row.get("N"))
-    H, W = I(row.get("H")), I(row.get("W"))
-    matN = I(row.get("matN"))
     iters = I(row.get("iters"))
     blk   = max(1, I(row.get("block")))
 
+    # Derive N from rows/cols if needed
     if N == 0 and rows > 0:
         N = rows if cols <= 1 else rows * cols
-    if H == 0 and W == 0 and rows > 0 and cols > 0:
-        H, W = rows, cols
-    if matN == 0 and rows > 0 and (cols == 0 or rows == cols):
-        matN = rows
+
+    # For matmul kernels, derive matN from rows (assumes square matrices)
+    matN = rows if rows > 0 and rows == cols else 0
 
     FLOPs = 0; BYTES = 0; WS = 0; pat = "coalesced"
 
@@ -188,13 +176,13 @@ def static_counts(row):
         WS    = 4
         pat   = "atomics_hotspot"
     elif k == "conv2d_3x3":
-        elems = max(1, rows*cols if rows*cols>0 else H*W)
+        elems = max(1, rows*cols)
         FLOPs = 18 * elems
         BYTES = 2  * elems * 4
         WS    = elems * 4
         pat   = "stencil_3x3"
     elif k == "conv2d_7x7":
-        elems = max(1, rows*cols if rows*cols>0 else H*W)
+        elems = max(1, rows*cols)
         FLOPs = 98 * elems
         BYTES = 2  * elems * 4
         WS    = elems * 4
@@ -207,7 +195,6 @@ def static_counts(row):
         n = 0
         if rows>0 and cols>0: n = rows*cols
         elif N>0: n = N
-        elif H>0 and W>0: n = H*W
         BYTES = 2*n*4 if n>0 else 0
         WS    = BYTES
         pat   = "unknown"
@@ -293,7 +280,7 @@ def aggregate_trials(trial_glob):
                     r["kernel"], r["args"], r["regs"], r["shmem"], r["device_name"],
                     r["block_x"], r["block_y"], r["block_z"], r["grid_x"], r["grid_y"], r["grid_z"],
                     r.get("warmup",""), r.get("reps",""),
-                    r.get("N",""), r.get("rows",""), r.get("cols",""), r.get("H",""), r.get("W",""), r.get("matN",""),
+                    r.get("N",""), r.get("rows",""), r.get("cols",""),
                     r.get("iters","")
                 )
                 groups.setdefault(key, []).append(F(r.get("time_ms"), 0.0))
@@ -305,7 +292,7 @@ def aggregate_trials(trial_glob):
         std_ms  = statistics.pstdev(times) if len(times)>1 else 0.0
         (kernel,args,regs,shmem,device_name,
          bx,by,bz,gx,gy,gz,warmup,reps,
-         N,rows,cols,H,W,matN,iters) = key
+         N,rows,cols,iters) = key
         out.append({
             "kernel": kernel, "args": args, "regs": regs, "shmem": shmem, "device_name": device_name,
             "block_x": bx, "block_y": by, "block_z": bz,
@@ -314,7 +301,7 @@ def aggregate_trials(trial_glob):
             "trials": str(len(times)),
             "mean_ms": f"{mean_ms:.6f}",
             "std_ms": f"{std_ms:.6f}",
-            "N": N, "rows": rows, "cols": cols, "H": H, "W": W, "matN": matN,
+            "N": N, "rows": rows, "cols": cols,
             "iters": iters,
             "block": str(I(bx)*I(by)*I(bz)),
             "grid_blocks": str(I(gx)*I(gy)*I(gz)),
@@ -402,7 +389,7 @@ def main():
         # Performance results
         "mean_ms","std_ms",
         # Problem sizes
-        "N","rows","cols","H","W","matN","iters","size_kind",
+        "N","rows","cols","iters","size_kind",
         # Kernel metrics (11 total)
         "FLOPs","BYTES","shared_bytes","working_set_bytes",
         "arithmetic_intensity","mem_pattern",
