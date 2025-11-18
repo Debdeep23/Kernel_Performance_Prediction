@@ -1,0 +1,13 @@
+{
+  "device_name": "NVIDIA TITAN V",
+  "warp_size": 32,
+  "sm_count": 80,
+  "sustained_mem_bandwidth_gbps": 650.0,
+  "sustained_compute_gflops": 15000.0,
+  "sm_limits": {
+    "max_threads_per_sm": 2048,
+    "max_blocks_per_sm": 32,
+    "registers_per_sm": 65536,
+    "shared_mem_per_sm_bytes": 98304
+  }
+}
