@@ -281,16 +281,16 @@ grep "vector_add" data/runs_4070_final.csv | head -3
 ### Final CSV Structure
 
 **~70 rows** (header + kernels × sizes)
-**~40 columns** organized as:
+**~37 columns** organized as:
 
 1. **Kernel Info** (3 cols): kernel name, register usage, shared memory
-2. **Launch Config** (2 cols): threads per block, grid blocks
+2. **Launch Config** (2 cols): block, grid_blocks
 3. **Performance** (2 cols): mean_ms, std_ms
-4. **Problem Size** (7 cols): N, rows, cols, matN, H, W, block
-5. **Kernel Metrics** (8 cols): FLOPs, BYTES, arithmetic_intensity, etc.
-6. **GPU Hardware** (10 cols): SM count, compute capability, registers, etc.
-7. **GPU Performance** (4 cols): calibrated bandwidth & compute
-8. **Achieved Perf** (2 cols): achieved bandwidth & compute
+4. **Problem Size** (3 cols): N, rows, cols
+5. **Kernel Metrics** (6 cols): FLOPs, BYTES, arithmetic_intensity, etc.
+6. **GPU Hardware** (9 cols): SM count, compute capability, registers, etc.
+7. **GPU Performance** (6 cols): calibrated bandwidth & compute
+8. **Achieved Perf** (4 cols): achieved bandwidth & compute
 9. **Models** (2 cols): T1_model_ms, speedup_model
 
 ---

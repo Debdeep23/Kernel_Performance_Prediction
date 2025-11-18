@@ -65,7 +65,7 @@ cd gpu-perf
 ```
 
 **Time:** ~10-20 minutes
-**Output:** `data/runs_2080ti_final.csv` with ~16 rows × 40 columns
+**Output:** `data/runs_2080ti_final.csv` with ~16 rows × 37 columns
 
 ---
 
@@ -205,7 +205,7 @@ grep -i error data/*.out
 
 **Expected:**
 - ~17 lines (1 header + 16 kernels)
-- 40 columns
+- 37 columns
 - No errors in output files
 
 ---
@@ -373,7 +373,7 @@ python3 scripts/build_final_dataset.py \
 
 ### Output File: `runs_2080ti_final.csv`
 
-**Format:** CSV with 40 columns
+**Format:** CSV with 37 columns
 
 **Sample row (truncated):**
 ```csv
@@ -413,7 +413,7 @@ vector_add,12,0,256,4096,0.025821,0.001111,...
 
 ### Full Column Reference
 
-See [METRICS_CHECKLIST.md](METRICS_CHECKLIST.md) for detailed explanation of all 40 columns.
+See [METRICS_CHECKLIST.md](METRICS_CHECKLIST.md) for detailed explanation of all 37 columns.
 
 ---
 
@@ -598,7 +598,7 @@ df['compute_efficiency'] = df['achieved_compute_gflops'] / df['calibrated_comput
 - [ ] Trial data generated (16 `trials_*.csv` files in `data/`)
 - [ ] GPU specs added to `build_final_dataset.py`
 - [ ] Final dataset created (`runs_<gpu>_final.csv`)
-- [ ] Output verified (16 rows, 40 columns, no errors)
+- [ ] Output verified (16 rows, 37 columns, no errors)
 
 **Total Time:** 15-30 minutes for complete pipeline
 

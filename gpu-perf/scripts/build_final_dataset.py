@@ -313,7 +313,6 @@ def aggregate_trials(trial_glob):
             "mean_ms": f"{mean_ms:.6f}",
             "std_ms": f"{std_ms:.6f}",
             "N": N, "rows": rows, "cols": cols,
-            "iters": iters,
             "block": str(I(bx)*I(by)*I(bz)),
             "grid_blocks": str(I(gx)*I(gy)*I(gz)),
         })

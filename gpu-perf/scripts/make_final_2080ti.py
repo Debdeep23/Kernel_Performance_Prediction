@@ -258,7 +258,7 @@ def main():
         "block_x","block_y","block_z","grid_x","grid_y","grid_z",
         "warmup","reps","trials","mean_ms","std_ms",
         # size family (only one set will be non-empty per kernel)
-        "N","rows","cols","matN","H","W","iters","block","grid_blocks",
+        "N","rows","cols","matN","H","W","block","grid_blocks",
         # static counts
         "FLOPs","BYTES","arithmetic_intensity","working_set_bytes","shared_bytes","mem_pattern",
         # GPU metrics
