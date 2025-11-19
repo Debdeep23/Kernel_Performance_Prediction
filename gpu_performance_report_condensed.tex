@@ -1,0 +1,650 @@
+% GPU Performance Prediction Project Report
+\documentclass[12pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{enumitem}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,
+    urlcolor=cyan,
+    citecolor=blue,
+}
+
+% Code listing setup
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red},
+}
+
+% Title page information
+\title{\textbf{Cross-GPU Performance Prediction Using\\Analytical Models and Machine Learning}}
+\author{
+    \textbf{Team Members:}\\[0.2em]
+    Arushi Srivastava - as19341\\
+    Debdeep Naha - dn2491\\
+    Eva Gupta - eg3900\\
+    Shika Rao - sr7463\\[1em]
+}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+% Abstract
+\section{Abstract}
+
+Selecting the right GPU for a workload or predicting application performance across platforms requires executing kernels on each target device---a process that is expensive (cloud GPU costs), time-consuming (hours for comprehensive evaluation), and impossible when hardware is unavailable or unreleased. Through this project, we want to attempt to solve the cross-GPU performance prediction problem: given kernel measurements on GPU-A, predict runtime on GPU-B using only device specifications, without executing on the target platform.
+
+We present 2 approaches: analytical performance modeling and machine learning techniques to enable zero-shot performance prediction across GPU architectures. Our methods leverage hardware specifications, kernel characteristics, and performance patterns observed on a source GPU to predict execution time on unseen target GPUs. We evaluate our approach on a comprehensive benchmark suite of 16 diverse CUDA kernels spanning memory-bound, compute-bound, and mixed workloads across four GPU architectures: NVIDIA TITAN V (Volta), GeForce GTX TITAN X (Maxwell), GeForce RTX 2080 Ti (Turing), and GeForce RTX 4070 (Ada Lovelace).
+
+\textbf{Keywords:} GPU Performance Prediction, Cross-Architecture Modeling, Roofline Model, Machine Learning, CUDA Kernels, Zero-Shot Transfer
+
+\newpage
+
+% Introduction
+\section{Introduction}
+
+\subsection{Motivation}
+
+The rapid evolution of GPU architectures presents a fundamental challenge for performance engineering: how can developers and researchers predict application performance on new or unavailable hardware without direct execution? This problem has become increasingly critical as:
+
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Cloud GPU costs} make extensive benchmarking prohibitively expensive (\$1-5/hour for high-end GPUs)
+    \item \textbf{Hardware availability} limits access to latest architectures during development cycles
+    \item \textbf{Design space exploration} requires evaluating hundreds of configurations across multiple platforms
+    \item \textbf{Procurement decisions} need performance forecasts before hardware purchase
+\end{itemize}
+
+Traditional approaches require executing benchmarks on every target platform, making comprehensive performance analysis infeasible for resource-constrained teams and impossible for unreleased hardware.
+
+\subsection{Problem Statement}
+
+Given:
+\begin{itemize}
+    \item Performance measurements of CUDA kernels on a \textit{source GPU} (GPU-A)
+    \item Hardware specifications of both source and \textit{target GPU} (GPU-B)
+    \item Kernel characteristics (FLOPs, memory accesses, arithmetic intensity, etc.)
+\end{itemize}
+
+\textbf{Objective:} Predict the execution time of kernels on the target GPU without running them on that hardware.
+
+\subsection{Approach Overview}
+
+Our solution has three key components:
+
+\begin{enumerate}
+    \item \textbf{Analytical Modeling:} We develop an extended Roofline model that captures both memory bandwidth and computational throughput limits, incorporating GPU-specific parameters like SM count, warp schedulers, and memory hierarchy.
+
+    \item \textbf{Feature Engineering:} We extract comprehensive kernel characteristics including arithmetic intensity, memory access patterns, occupancy metrics, and resource utilization to create transferable performance signatures.
+
+    \item \textbf{Machine Learning:} We employ machine learning models trained on source GPU data with architecture-aware normalization to enable zero-shot prediction on target GPUs.
+\end{enumerate}
+
+\subsection{Contributions}
+
+\begin{itemize}
+    \item A comprehensive benchmark suite of 16 diverse CUDA kernels with 71 configurations per GPU, totaling over 200 data points per architecture
+    \item An extended analytical model that accounts for architectural differences in memory systems, compute units, and scheduling policies
+    \item Empirical validation across three generations of NVIDIA GPUs (Volta, Turing, Ada Lovelace, Maxwell)
+    \item Open-source implementation and dataset for reproducibility
+\end{itemize}
+
+\subsection{Organization}
+
+The remainder of this report is structured as follows: Section~\ref{sec:literature} reviews related work in performance modeling and prediction. Section~\ref{sec:methodology} describes our proposed methodology including data collection, analytical models, and ML approaches. Section~\ref{sec:experimental} details the experimental setup and benchmark kernels. Section~\ref{sec:results} presents results and analysis. Section~\ref{sec:conclusion} concludes with future directions.
+
+\newpage
+
+% Literature Survey (CONDENSED)
+\section{Literature Survey}
+\label{sec:literature}
+
+\subsection{Analytical Performance Models}
+
+\subsubsection{Roofline Model}
+
+The Roofline model, introduced by Williams et al.~\cite{williams2009roofline}, provides an insightful visual performance model for multicore architectures. The model establishes performance bounds based on two fundamental hardware limits:
+
+\begin{equation}
+\text{Performance} = \min\left(\text{Peak Compute}, \text{Bandwidth} \times \text{Arithmetic Intensity}\right)
+\end{equation}
+
+where Arithmetic Intensity = FLOPs/Bytes Transferred. While the model provides intuitive upper bounds and identifies compute vs. memory bottlenecks, it assumes perfect utilization and does not capture cache effects or memory hierarchy.
+
+\subsubsection{Hierarchical Roofline Extensions}
+
+Yang et al.~\cite{yang2020hierarchical} and Ding and Williams~\cite{ding2019instruction} extended the Roofline model to account for GPU memory hierarchy (DRAM, L2, L1, shared memory) and different arithmetic operations. Konstantinidis and Cotronis~\cite{konstantinidis2017quantitative} developed a quantitative roofline using micro-benchmarks to calibrate achievable bandwidths. However, these hierarchical models still require profiling on each target GPU, limiting zero-shot transfer capability.
+
+\subsubsection{Pipeline-Based Analytical Models}
+
+Hong and Kim~\cite{hong2009analytical} developed analytical models accounting for memory-level and thread-level parallelism by modeling the GPU execution pipeline as $T_{\text{kernel}} = \max(T_{\text{compute}}, T_{\text{memory}})$. These models require detailed microarchitectural knowledge and target-specific profiling data.
+
+\subsection{Machine Learning Approaches}
+
+\subsubsection{Early ML for Heterogeneous Systems}
+
+Grewe and O'Boyle~\cite{grewe2011static} pioneered ML for heterogeneous performance prediction, using static code features and decision trees for CPU-GPU task partitioning (77-90\% accuracy). However, these approaches required extensive training data for each target architecture, lacking cross-platform generalization.
+
+\subsubsection{Deep Learning Models}
+
+\textbf{Habitat} (Yu et al., 2021)~\cite{yu2021habitat} developed multi-layer perceptrons for deep learning workload prediction using hardware features, execution patterns, and runtime statistics. While achieving good accuracy on training data, it exhibited high percentage errors ($>100\%$) for newer models and unseen GPUs.
+
+\textbf{Critical Observation:} Lee et al.~\cite{lee2024forecasting} demonstrated that naively using ML to predict kernel latency fails to capture continuous performance improvements from GPU software and hardware optimizations.
+
+\subsection{Simulation-Based Methods}
+
+\subsubsection{GPGPU-Sim and Accel-Sim}
+
+Bakhoda et al.~\cite{bakhoda2009analyzing} introduced GPGPU-Sim, a cycle-accurate GPU simulator modeling warp scheduling, memory coalescing, and cache behavior (5-10\% error for older architectures). Khairy et al.~\cite{khairy2020accel} modernized this with Accel-Sim for Volta/Ampere support. Even optimized sampled simulators~\cite{avalos2021sampled} require hours for realistic workloads, making them unsuitable for rapid design-space exploration.
+
+\subsection{Hybrid Approaches}
+
+\subsubsection{Transfer Learning Methods}
+
+Ardalani et al.~\cite{ardalani2015xapp} developed XAPP for CPU$\rightarrow$GPU transfer using two-level ML pipelines, while Zheng et al.~\cite{zheng2017lacross} (LACross) and Qi et al.~\cite{qi2023cp3} (CP³) incorporated transfer learning for partial model reuse. However, they still require \textit{some profiling} on the target GPU.
+
+\subsubsection{NeuSight}
+
+Lee et al.~\cite{lee2024forecasting} presented NeuSight, which decomposes workloads into tiles, predicts per-tile utilization with ML, and bounds latency using GPU performance laws. It achieved state-of-the-art accuracy (2-15\%) on unseen GPUs but applies mainly to deep learning operators, not general CUDA kernels.
+
+\subsection{Research Gap}
+
+Existing work lacks a \textbf{true zero-shot approach for general CUDA kernels}. Our work addresses this gap by developing architecture-aware analytical models that transfer without target execution, creating comprehensive kernel characterizations, and validating on diverse workload types beyond deep learning.
+
+\newpage
+
+\section{Proposed Methodology}
+\label{sec:methodology}
+\subsection{Data Collection}
+\subsubsection{Kernel Metrics}
+\subsubsection{GPU Metrics}
+
+
+\subsection{Analytical Model}
+
+We decompose performance of a kernel into three components that can be independently analyzed and transferred:
+
+\begin{equation*}
+\text{Runtime} = f(\text{Hardware Capability}, \text{Resource Utilization}, \text{Kernel Efficiency})
+\end{equation*}
+
+While GPUs have different absolute performance capabilities (e.g., TITAN V has 14.9 TFLOPS vs RTX 2080 Ti has 13.5 TFLOPS), the \textit{efficiency} with which a kernel uses available resources tends to remain stable across architectures. A kernel that achieves 70\% of theoretical peak on one GPU will likely achieve similar relative efficiency on another.
+
+\subsubsection{The Roofline Foundation (Hardware Capability)}
+
+The Roofline model~\cite{williams2009roofline} provides a physics-based upper bound on performance. Every kernel is limited by either:
+\begin{itemize}
+    \item \textbf{Compute:} How fast the GPU can execute arithmetic operations
+    \item \textbf{Memory:} How fast data can be moved to/from DRAM
+\end{itemize}
+
+\textbf{The Model:}
+\begin{equation*}
+\text{Max Performance} = \min(\text{Peak Compute}, \text{Arithmetic Intensity} \times \text{Peak Bandwidth})
+\end{equation*}
+
+where \textbf{Arithmetic Intensity} (AI) is:
+\begin{equation*}
+\text{AI} = \frac{\text{FLOPs}}{\text{Bytes Transferred}}
+\end{equation*}
+
+This model gives us a theoretical upper bound that accounts for both compute and memory capabilities. However, real kernels never achieve theoretical peaks. We model this gap with two factors:
+
+\begin{equation*}
+\text{Actual Performance} = \eta \times O \times \text{Peak Performance}
+\end{equation*}
+
+where $O$ = \textbf{Occupancy} (architecture-dependent) and $\eta$ = \textbf{Efficiency} (kernel-dependent, relatively constant across GPUs).
+
+\subsubsection{Occupancy (Resource Utilization)}
+
+Occupancy measures what fraction of a GPU's parallel execution capacity is utilized:
+
+\begin{equation*}
+O = \frac{\text{Active Warps per SM}}{\text{Max Possible Warps per SM}}
+\end{equation*}
+
+The number of concurrent thread blocks is constrained by:
+
+\begin{align*}
+B_{\text{reg}} &= \left\lfloor \frac{\text{Registers per SM}}{\text{Regs per thread} \times \text{Threads per block}} \right\rfloor \\
+B_{\text{smem}} &= \left\lfloor \frac{\text{Shared mem per SM}}{\text{Shared mem per block}} \right\rfloor \\
+B_{\text{threads}} &= \left\lfloor \frac{\text{Max threads per SM}}{\text{Threads per block}} \right\rfloor \\
+B_{\text{hardware}} &= \text{Max blocks per SM (hardware limit)}
+\end{align*}
+
+\begin{equation*}
+B_{\text{active}} = \min(B_{\text{reg}}, B_{\text{smem}}, B_{\text{threads}}, B_{\text{hardware}})
+\end{equation*}
+
+\subsubsection{Kernel Efficiency}
+
+Kernel efficiency captures how effectively a kernel utilizes available computational resources, independent of specific hardware capabilities. This efficiency factor accounts for microarchitectural effects not captured by the roofline model or occupancy, including instruction mix, memory access patterns, control flow, and latency hiding. The critical assumption enabling cross-GPU prediction is that kernel efficiency remains relatively stable across architectures.
+
+\subsection{Cross-GPU Prediction Model}
+
+\subsubsection{Core Prediction Formula}
+
+Given measurements on source GPU, we predict target GPU time:
+
+\begin{equation*}
+T_{\text{tgt}} = T_{\text{src}} \times \frac{\text{Roof}_{\text{src}}}{\text{Roof}_{\text{tgt}}} \times \frac{O_{\text{src}}}{O_{\text{tgt}}} \times \underbrace{\frac{\eta_{\text{src}}}{\eta_{\text{tgt}}}}_{\approx 1}
+\end{equation*}
+
+\textbf{Key Assumption:} Efficiency transfers, i.e., $\eta_{\text{src}} \approx \eta_{\text{tgt}}$
+
+We compute efficiency on the source GPU:
+\begin{equation*}
+\eta_{\text{src}} = \frac{\text{Measured Performance}}{O_{\text{src}} \times \text{Roof}_{\text{src}}}
+\end{equation*}
+
+\subsubsection{Handling Different Kernel Types}
+
+\textbf{Case 1: Pure Memory Operations (FLOPs = 0)}
+
+Examples: vector\_add, naive\_transpose, strided\_copy
+
+\begin{align*}
+BW_{\text{measured}} &= \frac{\text{Bytes}}{T_{\text{src}}} \\
+\eta_{BW} &= \frac{BW_{\text{measured}}}{O_{\text{src}} \times BW_{\text{peak,src}}} \\
+T_{\text{tgt}} &= \frac{\text{Bytes}}{\eta_{BW} \times O_{\text{tgt}} \times BW_{\text{peak,tgt}}}
+\end{align*}
+
+\textbf{Case 2: Compute Operations (FLOPs $>$ 0)}
+
+Examples: matmul, conv2d, saxpy, dot\_product
+
+\begin{align*}
+\text{Roof} &= \min(\text{Peak Compute}, \text{AI} \times \text{Peak BW}) \\
+P_{\text{measured}} &= \frac{\text{FLOPs}}{T_{\text{src}}} \\
+\eta &= \frac{P_{\text{measured}}}{O_{\text{src}} \times \text{Roof}_{\text{src}}} \\
+T_{\text{tgt}} &= \frac{\text{FLOPs}}{\eta \times O_{\text{tgt}} \times \text{Roof}_{\text{tgt}}}
+\end{align*}
+
+\subsection{Complete Prediction Algorithm}
+
+\begin{algorithm}[H]
+\caption{Cross-GPU Performance Prediction}
+\label{alg:prediction}
+\begin{algorithmic}
+\Require $T_{\text{src}}$, FLOPs, Bytes from source GPU
+\Require Source GPU specs: $C_{\text{src}}$, $BW_{\text{src}}$, resources
+\Require Target GPU specs: $C_{\text{tgt}}$, $BW_{\text{tgt}}$, resources
+\Ensure $T_{\text{tgt}}$ (predicted time on target GPU)
+
+\State // Compute occupancy on both GPUs
+\State $O_{\text{src}} \gets \text{ComputeOccupancy}(\text{kernel, src\_resources})$
+\State $O_{\text{tgt}} \gets \text{ComputeOccupancy}(\text{kernel, tgt\_resources})$
+
+\If{FLOPs $= 0$}  \Comment{Pure memory case}
+    \State $BW_{\text{measured}} \gets \text{Bytes} / T_{\text{src}}$
+    \State $\eta \gets BW_{\text{measured}} / (O_{\text{src}} \times BW_{\text{src}})$
+    \State $T_{\text{tgt}} \gets \text{Bytes} / (\eta \times O_{\text{tgt}} \times BW_{\text{tgt}})$
+\Else  \Comment{Compute or mixed case}
+    \State $\text{AI} \gets \text{FLOPs} / \text{Bytes}$
+    \State $\text{Roof}_{\text{src}} \gets \min(C_{\text{src}}, \text{AI} \times BW_{\text{src}})$
+    \State $\text{Roof}_{\text{tgt}} \gets \min(C_{\text{tgt}}, \text{AI} \times BW_{\text{tgt}})$
+    \State $P_{\text{measured}} \gets \text{FLOPs} / T_{\text{src}}$
+    \State $\eta \gets P_{\text{measured}} / (O_{\text{src}} \times \text{Roof}_{\text{src}})$
+    \State $T_{\text{tgt}} \gets \text{FLOPs} / (\eta \times O_{\text{tgt}} \times \text{Roof}_{\text{tgt}})$
+\EndIf
+
+\State \Return $T_{\text{tgt}}$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Model Calibration Strategy}
+
+GPU datasheets list theoretical peaks, but real applications achieve 85-95\% due to overhead and power limitations. We use \textit{sustained} performance from micro-benchmarks (optimized memory copy for bandwidth, optimized matrix multiplication for compute) to account for inherent hardware limitations affecting all kernels.
+
+\subsection{Key Assumptions and Validity}
+
+Our model assumes:
+
+\begin{enumerate}
+    \item \textbf{Efficiency transfers ($\eta_{\text{src}} \approx \eta_{\text{tgt}}$)}
+
+    \textbf{Valid:} Same memory access patterns and cache behavior relative to capacity.
+    \textbf{Breaks:} Workload fits in cache on one GPU but not another, or specialized hardware (Tensor/RT cores) is used.
+
+    \item \textbf{Occupancy captures parallelism}
+
+    \textbf{Valid:} Static resource allocation and regular workload distribution.
+    \textbf{Breaks:} Severe load imbalance or dynamic parallelism dominates.
+
+    \item \textbf{Roofline captures bottleneck}
+
+    \textbf{Valid:} Kernel is clearly compute- or memory-bound with minimal overlap.
+    \textbf{Breaks:} Complex instruction mix or launch overhead dominates (very short kernels).
+\end{enumerate}
+
+These assumptions are validated empirically in Section~\ref{sec:results}.
+
+\newpage
+
+% Experimental Setup
+\section{Experimental Setup- Hardware and Kernel Data Collection}
+\label{sec:experimental}
+\subsection{Hardware Platforms}
+
+We conducted experiments on 4 NVIDIA GPU architectures representing different generations and market segments. We collected the data for each GPU using Nsight Compute CLI (NCU).
+
+\begin{table}[H]
+\centering
+\caption{GPU Hardware Specifications}
+\label{tab:gpu_specs}
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{Specification} & \textbf{TITAN V} & \textbf{RTX 2080 Ti} & \textbf{RTX 4070} & \textbf{GTX TITAN X} \\
+\midrule
+Architecture & Volta & Turing & Ada Lovelace & Maxwell \\
+Compute Capability & 7.0 & 7.5 & 8.9 & 5.2 \\
+Launch Year & 2017 & 2018 & 2023 & 2015 \\
+\midrule
+SM Count & 80 & 68 & 46 & 24 \\
+CUDA Cores & 5120 & 4352 & 5888 & 3072 \\
+Tensor Cores & 640 (1st gen) & 544 (2nd gen) & 184 (4th gen) & -- \\
+\midrule
+Base Clock & 1200 MHz & 1350 MHz & 1920 MHz & 1000 MHz \\
+Boost Clock & 1455 MHz & 1545 MHz & 2475 MHz & 1075 MHz \\
+\midrule
+Memory Size & 12 GB HBM2 & 11 GB GDDR6 & 12 GB GDDR6X & 12 GB GDDR5 \\
+Memory Bus & 3072-bit & 352-bit & 192-bit & 384-bit \\
+Memory Bandwidth & 652 GB/s & 616 GB/s & 504 GB/s & 336 GB/s \\
+\midrule
+L2 Cache & 4.5 MB & 5.5 MB & 36 MB & 3 MB \\
+Shared Memory/SM & 96 KB & 64 KB & 100 KB & 96 KB \\
+Registers/SM & 65536 & 65536 & 65536 & 65536 \\
+\midrule
+Peak FP32 (TFLOPS) & 14.9 & 13.5 & 29.1 & 7.47 \\
+Peak FP16 (TFLOPS) & 29.8 & 27.0 & 116.4 & -- \\
+TDP & 250W & 250W & 200W & 250W \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Benchmark Kernels}
+
+We developed a comprehensive benchmark suite of 16 CUDA kernels covering diverse computational patterns.
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{ll}
+\textbf{Category} & \textbf{Kernels} \\ \hline
+Memory-bound &
+vector\_add, saxpy, strided\_copy\_8, naive\_transpose,
+shared\_transpose, random\_access \\[2pt]
+Compute-bound &
+matmul\_naive, matmul\_tiled, conv2d\_3x3, conv2d\_7x7 \\[2pt]
+Reductions &
+reduce\_sum, dot\_product \\[2pt]
+Atomic ops &
+histogram, atomic\_hotspot \\[2pt]
+Special cases &
+vector\_add\_divergent, shared\_bank\_conflict \\
+\end{tabular}
+\end{table}
+
+\subsection{Problem Sizes and Configurations}
+
+Each kernel was tested at multiple problem sizes to capture scaling behavior.
+
+\begin{table}[H]
+\centering
+\caption{Problem Size Categories}
+\label{tab:problem_sizes}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Category} & \textbf{1D (N elements)} & \textbf{2D (rows$\times$cols)} & \textbf{MatMul (N$\times$N)} \\
+\midrule
+Small & 262,144 & 512$\times$512 & 256$\times$256 \\
+Medium & 1,048,576 & 1024$\times$1024 & 512$\times$512 \\
+Large & 4,194,304 & 2048$\times$2048 & 1024$\times$1024 \\
+XLarge & 16,777,216* & 4096$\times$4096* & 2048$\times$2048 \\
+\bottomrule
+\multicolumn{4}{l}{\small *Reduced for RTX 4070 due to memory constraints}
+\end{tabular}
+\end{table}
+
+\textbf{Total configurations per GPU:} 71 (varying by kernel type and size)
+
+\subsection{Measurement Methodology}
+
+For each kernel configuration, we perform:
+\textbf{warmup} (10–20 iterations, kernel-dependent),
+\textbf{measurement} (50–100 iterations, kernel-dependent),
+\textbf{trials} (10 independent runs), and
+\textbf{metric} collection (mean execution time in ms and standard deviation).
+
+\subsection{Feature Extraction}
+
+For each kernel configuration, we extracted the following features:
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabular}{p{3.5cm} p{9cm}}
+\textbf{Kernel Characteristics} &
+FLOPs (floating-point operations);
+Memory bytes transferred;
+Arithmetic intensity (FLOPs/Byte);
+Working set size;
+Shared memory usage;
+Register usage per thread \\[6pt]
+
+\textbf{Memory Access Patterns} &
+Coalesced vs.\ uncoalesced;
+Stride information;
+Random access indicators;
+Bank conflict potential \\[6pt]
+
+\textbf{Control Flow} &
+Branch divergence flags;
+Atomic operation counts;
+Synchronization points \\[6pt]
+
+\textbf{Occupancy Metrics} &
+Theoretical occupancy;
+Blocks per SM;
+Threads per block;
+Grid dimensions \\
+\end{tabular}
+\end{table}
+
+\subsection{Dataset Statistics}
+
+\begin{table}[H]
+\centering
+\caption{Benchmark Dataset Summary}
+\label{tab:dataset_stats}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{GPU} & \textbf{Configurations} & \textbf{Total Runs} & \textbf{Kernel Launches} \\
+\midrule
+TITAN V & 71 & 710 & 85,200 \\
+RTX 2080 Ti & 71 & 710 & 85,200 \\
+RTX 4070 & 71 & 710 & 85,200 \\
+\midrule
+\textbf{Total} & \textbf{213} & \textbf{2,130} & \textbf{255,600} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\newpage
+
+% Results and Analysis
+\section{Results and Analysis of the models}
+\label{sec:results}
+We evaluate both models (analytic roofline-based model and Random Forest ML model) under three controlled generalization settings. These experiments test the models' ability to transfer performance information across GPUs, across new problem configurations, and across entirely new kernels.
+
+\subsection{Experiment 1: Given kernel \& configuration on a GPU, predict performance of the same kernel and same configuration on a New GPU)}
+Predict runtime on a previously unseen GPU (TITAN V), given the same kernel and same configuration measured on other GPUs.
+\subsubsection{Analytic Model Results (Exp1)}
+
+
+
+
+% Conclusions
+\section{Conclusions and Future Work}
+\label{sec:conclusion}
+
+% TODO: Add conclusions here
+
+\subsection{Summary of Contributions}
+
+[Space for summary]
+
+\subsection{Key Findings}
+
+[Space for key findings]
+
+\subsection{Limitations}
+
+[Space for limitations]
+
+\subsection{Future Directions}
+
+[Space for future work]
+
+\newpage
+
+% References
+\begin{thebibliography}{99}
+
+\bibitem{williams2009roofline}
+S. Williams, A. Waterman, and D. Patterson,
+``Roofline: An insightful visual performance model for multicore architectures,''
+\textit{Communications of the ACM}, vol. 52, no. 4, pp. 65-76, 2009.
+
+\bibitem{yang2020hierarchical}
+C. Yang, T. Kurth, and S. Williams,
+``Hierarchical roofline analysis for GPUs: Accelerating performance optimization for the NERSC-9 Perlmutter system,''
+\textit{Concurrency and Computation: Practice and Experience}, vol. 32, no. 20, 2020.
+
+\bibitem{ding2019instruction}
+N. Ding and S. Williams,
+``An instruction roofline model for GPUs,''
+in \textit{Proc. IEEE/ACM Performance Modeling, Benchmarking and Simulation of High Performance Computer Systems (PMBS)}, 2019, pp. 7-18.
+
+\bibitem{konstantinidis2017quantitative}
+E. Konstantinidis and Y. Cotronis,
+``A quantitative roofline model for GPU kernel performance estimation using micro-benchmarks and hardware metric profiling,''
+\textit{Journal of Parallel and Distributed Computing}, vol. 107, pp. 37-56, 2017.
+
+\bibitem{hong2009analytical}
+S. Hong and H. Kim,
+``An analytical model for a GPU architecture with memory-level and thread-level parallelism awareness,''
+in \textit{Proc. 36th Annual International Symposium on Computer Architecture}, pp. 152-163, 2009.
+
+\bibitem{lemeire2023analysis}
+J. Lemeire et al.,
+``Analysis of the analytical performance models for GPUs and extracting the underlying Pipeline model,''
+\textit{Journal of Parallel and Distributed Computing}, vol. 181, 2023.
+
+\bibitem{grewe2011static}
+D. Grewe and M. F. P. O'Boyle,
+``A static task partitioning approach for heterogeneous systems using OpenCL,''
+in \textit{Proc. 20th International Conference on Compiler Construction (CC)}, pp. 286-305, 2011.
+
+\bibitem{kothapalli2009performance}
+K. Kothapalli et al.,
+``A performance prediction model for the CUDA GPGPU platform,''
+in \textit{Proc. International Conference on High Performance Computing (HiPC)}, 2009.
+
+\bibitem{baghsorkhi2009model}
+S. S. Baghsorkhi et al.,
+``An adaptive performance modeling tool for GPU architectures,''
+in \textit{Proc. ACM SIGPLAN Symposium on Principles and Practice of Parallel Programming (PPoPP)}, 2010.
+
+\bibitem{yu2021habitat}
+G. X. Yu, Y. Gao, P. Golikov, and G. Pekhimenko,
+``Habitat: A runtime-based computational performance predictor for deep neural network training,''
+in \textit{Proc. USENIX Annual Technical Conference (ATC)}, 2021.
+
+\bibitem{li2023learning}
+J. Li et al.,
+``Learning-based performance prediction for data-intensive applications,''
+\textit{IEEE Transactions on Parallel and Distributed Systems}, vol. 34, no. 5, 2023.
+
+\bibitem{lee2024forecasting}
+S. Lee et al.,
+``Forecasting GPU performance for deep learning training and inference: NeuSight and beyond,''
+in \textit{Proc. 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS)}, vol. 1, pp. 493-508, 2024.
+
+\bibitem{bakhoda2009analyzing}
+A. Bakhoda, G. L. Yuan, W. W. L. Fung, H. Wong, and T. M. Aamodt,
+``Analyzing CUDA workloads using a detailed GPU simulator,''
+in \textit{Proc. IEEE International Symposium on Performance Analysis of Systems and Software (ISPASS)}, pp. 163-174, 2009.
+
+\bibitem{khairy2020accel}
+M. Khairy, Z. Shen, T. M. Aamodt, and T. G. Rogers,
+``Accel-sim: An extensible simulation framework for validated GPU modeling,''
+in \textit{Proc. 47th Annual International Symposium on Computer Architecture (ISCA)}, pp. 473-486, 2020.
+
+\bibitem{avalos2021sampled}
+D. Avalos Baddouh et al.,
+``Sampled simulation of GPU kernels,''
+\textit{IEEE Computer Architecture Letters}, 2021.
+
+\bibitem{ardalani2015xapp}
+N. Ardalani, C. Lestourgeon, K. Sankaralingam, and X. Zhu,
+``Cross-architecture performance prediction (XAPP) using CPU code to predict GPU performance,''
+in \textit{Proc. 48th International Symposium on Microarchitecture (MICRO)}, pp. 725-737, 2015.
+
+\bibitem{zheng2017lacross}
+X. Zheng, L. K. John, and A. Gerstlauer,
+``LACross: Learning-based analytical cross-platform performance and power prediction,''
+\textit{International Journal of Parallel Programming}, vol. 45, pp. 1488-1514, 2017.
+
+\bibitem{qi2023cp3}
+X. Qi, J. Chen, and L. Deng,
+``CP³: Hierarchical cross-platform power/performance prediction using a transfer learning approach,''
+in \textit{Proc. International Conference on Algorithms and Architectures for Parallel Processing (ICA3PP)}, pp. 119-134, 2023.
+
+\end{thebibliography}
+
+\newpage
+
+% Appendix
+\appendix
+
+\section{Kernel Implementation Details}
+
+[Space for kernel code snippets and implementation notes]
+
+\section{Complete Benchmark Results}
+
+[Space for detailed performance tables]
+
+\section{Statistical Analysis}
+
+[Space for additional statistical analysis]
+
+\end{document}
