@@ -10,5 +10,5 @@ __global__ void stencil2d_5pt_kernel(const float* __restrict__ in,
   float s = in[(y+1)*W + x];
   float w = in[y*W + x-1];
   float e = in[y*W + x+1];
-  out[y*W + x] = 0.25f*(n+s+w+e) - c*0.0f; // simple average
+  out[y*W + x] = 0.25f*(n+s+w+e) - c*0.0f;
 }

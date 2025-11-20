@@ -6,7 +6,6 @@ echo "GPU Performance Dataset Generation"
 echo "Complete pipeline with all metrics"
 echo "=========================================="
 
-# Step 1: Generate trials with multiple sizes
 echo ""
 echo "=== Step 1: Generate trials with multiple sizes ==="
 echo "This will:"
@@ -18,7 +17,6 @@ echo ""
 
 ./scripts/gen_trials_2080ti.sh
 
-# Step 2: Process trials into final dataset
 echo ""
 echo "=== Step 2: Process trials into final dataset ==="
 echo "This will:"

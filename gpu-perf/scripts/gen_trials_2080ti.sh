@@ -10,12 +10,7 @@ nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -arch=sm_75 -DTILE=32 \
   -o bin/runner runner/main.cu 2> data/ptxas_2080ti.log
 test -x bin/runner
 
-# Helper the suite relies on
 chmod +x scripts/run_trials.sh
-
-# Run kernels with MULTIPLE SIZES to generate more data
-# Format: kernel_name "args" regs shmem trials device
-# We'll test 4 different sizes: Small (256K), Medium (1M), Large (4M), XLarge (16M)
 
 echo "=== Running vector_add with multiple sizes ==="
 scripts/run_trials.sh vector_add "--N 262144 --block 256 --warmup 20 --reps 100" 12 0 10 2080ti

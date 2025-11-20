@@ -7,7 +7,7 @@ __global__ void shared_bank_conflict_kernel(float* __restrict__ out){
   __syncthreads();
   float acc=0.f;
   for(int it=0; it<1024; ++it){
-    acc += s[(it*33) & 1023]; // stride 33 to trigger conflicts
+    acc += s[(it*33) & 1023];
   }
   out[tid] = acc;
 }

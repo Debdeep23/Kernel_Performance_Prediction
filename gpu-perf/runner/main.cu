@@ -1,11 +1,9 @@
-// runner/main.cu
 #include <cuda_runtime.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 
-// === kernel headers (must exist in ../kernels) ===
 #include "../kernels/vector_add.cuh"
 #include "../kernels/saxpy.cuh"
 #include "../kernels/strided_copy_8.cuh"
@@ -23,7 +21,6 @@
 #include "../kernels/matmul_naive.cuh"
 #include "../kernels/atomic_hotspot.cuh"
 
-// ---------- helpers ----------
 #define CUDA_CHECK(call)                                                        \
   do {                                                                          \
     cudaError_t err__ = (call);                                                 \
@@ -36,7 +33,6 @@
 
 template <typename F>
 float time_ms(F launch, int warm, int reps) {
-  // warmup
   for (int i = 0; i < warm; ++i) launch();
   CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -59,18 +55,16 @@ float time_ms(F launch, int warm, int reps) {
 }
 
 int main(int argc, char** argv) {
-  // defaults
   std::string kernel = "vector_add";
-  int N = 1 << 20;            // used by 1D kernels
+  int N = 1 << 20;
   int block = 256;
   int warm = 20, reps = 100;
-  int rows = 2048, cols = 2048; // transpose
-  int matN = 512;               // matmul sizes
-  float alpha = 2.0f;           // saxpy
-  int H = 1024, W = 1024;       // conv
-  int iters = 100;              // atomic_hotspot
+  int rows = 2048, cols = 2048;
+  int matN = 512;
+  float alpha = 2.0f;
+  int H = 1024, W = 1024;
+  int iters = 100;
 
-  // arg parsing
   for (int i = 1; i < argc; ++i) {
     if (!strcmp(argv[i], "--kernel") && i + 1 < argc) kernel = argv[++i];
     else if (!strcmp(argv[i], "--N") && i + 1 < argc) N = atoi(argv[++i]);
@@ -86,7 +80,6 @@ int main(int argc, char** argv) {
     else if (!strcmp(argv[i], "--iters") && i + 1 < argc) iters = atoi(argv[++i]);
   }
 
-  // ===== kernels =====
   if (kernel == "vector_add") {
     size_t bytes = (size_t)N * sizeof(float);
     float *A, *B, *C;
@@ -126,7 +119,6 @@ int main(int argc, char** argv) {
     CUDA_CHECK(cudaMalloc(&C, bytes));
     CUDA_CHECK(cudaMemset(A, 0, bytes));
     CUDA_CHECK(cudaMemset(C, 0, bytes));
-    // indices processed = ceil(N/8)
     int nidx = (N + 7) / 8;
     dim3 blk(block), grid((nidx + block - 1) / block);
     auto launch = [&]() { strided_copy_8_kernel<<<grid, blk>>>(A, C, N); };

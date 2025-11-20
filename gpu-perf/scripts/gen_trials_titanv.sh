@@ -7,8 +7,6 @@ rm -f data/trials_*__titanv.csv
 echo "=== build runner for TITAN V (Volta sm_70) ==="
 mkdir -p bin data
 
-# TITAN V requires CUDA 11.x or older (sm_70 support)
-# CUDA 13.0+ dropped Volta support
 echo "Compiling for sm_70 (Volta - TITAN V native architecture)..."
 
 if nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -arch=sm_70 -DTILE=32 \
@@ -27,13 +25,7 @@ fi
 
 test -x bin/runner || { echo "ERROR: bin/runner not executable"; exit 1; }
 
-# Helper the suite relies on
 chmod +x scripts/run_trials.sh
-
-# Run kernels with MULTIPLE SIZES to generate more data
-# Format: kernel_name "args" regs shmem trials device
-# We'll test 4 different sizes: Small (256K), Medium (1M), Large (4M), XLarge (8M)
-# Note: Using 8M for XLarge to be conservative with 12GB VRAM
 
 echo "=== Running vector_add with multiple sizes ==="
 scripts/run_trials.sh vector_add "--N 262144 --block 256 --warmup 20 --reps 100" 12 0 10 titanv

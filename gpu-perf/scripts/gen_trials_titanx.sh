@@ -5,17 +5,13 @@ echo "=== wipe old titanx trials ==="
 rm -f data/trials_*__titanx.csv
 
 echo "=== build runner for sm_52 (Maxwell / Titan X) ==="
-# Note: If you have Titan X Pascal, change sm_52 to sm_61
 mkdir -p bin data
 nvcc -std=c++14 -O3 --ptxas-options=-v -lineinfo -arch=sm_52 -DTILE=32 \
   -o bin/runner runner/main.cu 2> data/ptxas_titanx.log
 test -x bin/runner
 
-# Helper the suite relies on
 chmod +x scripts/run_trials.sh
 
-# Run exactly the kernels you care about (10 trials each; reps handled by runner args)
-# regs/shmem values are just annotations for the CSV header your run_trials.sh writes
 scripts/run_trials.sh vector_add            "--N 1048576 --block 256 --warmup 20 --reps 100" 12 0 10  titanx
 scripts/run_trials.sh saxpy                 "--N 1048576 --block 256 --warmup 20 --reps 100" 12 0 10  titanx
 scripts/run_trials.sh strided_copy_8        "--N 1048576 --block 256 --warmup 20 --reps 100"  8 0 10  titanx
