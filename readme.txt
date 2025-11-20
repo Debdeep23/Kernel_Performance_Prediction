@@ -25,13 +25,15 @@ performance numbers.
 
 If using module system (HPC clusters):
 
+# For RTX 4070 (Ada Lovelace, sm_89):
+module load cuda-13.0
+
+# For RTX 2080 Ti, Titan X (Turing, sm_75):
+module load cuda-12.6
+
 # For Titan V (Volta, sm_70):
 module load cuda-12.6
 # AVOID CUDA 13.0+ for sm_70 - causes performance degradation
-
-# For RTX 2080 Ti, RTX 4070, Titan X (Turing/Ada, sm_75/sm_89):
-module load cuda-12.6
-# or module load cuda-13.0 for newer architectures
 
 Verify CUDA version:
 nvcc --version
