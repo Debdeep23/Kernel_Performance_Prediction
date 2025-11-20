@@ -17,6 +17,25 @@ REQUIREMENTS:
 - Python 3.6+
 - Bash shell
 
+CUDA VERSION COMPATIBILITY:
+----------------------------
+IMPORTANT: Different GPU architectures require different CUDA versions for
+optimal performance. Using incompatible CUDA versions can result in absurd
+performance numbers.
+
+If using module system (HPC clusters):
+
+# For Titan V (Volta, sm_70):
+module load cuda-12.6
+# AVOID CUDA 13.0+ for sm_70 - causes performance degradation
+
+# For RTX 2080 Ti, RTX 4070, Titan X (Turing/Ada, sm_75/sm_89):
+module load cuda-12.6
+# or module load cuda-13.0 for newer architectures
+
+Verify CUDA version:
+nvcc --version
+
 STEP 1: GPU CALIBRATION (one-time setup per GPU)
 -------------------------------------------------
 cd gpu-perf/calibration
