@@ -1,4 +1,4 @@
-# GPU Performance Data Collection Suite
+# GPU Performance Data Collection 
 
 A comprehensive benchmark suite for collecting GPU performance data across multiple NVIDIA GPU architectures. This repository contains CUDA kernels, calibration tools, and data collection pipelines to generate detailed performance datasets.
 
