@@ -78,6 +78,9 @@ Calibration outputs:
 - `gemm_cublas_*.out`: Sustained compute throughput (GFLOPS)
 
 ### Step 2: Generate Dataset
+
+**Option A: Automated Pipeline (Recommended)**
+
 Run the complete pipeline to collect all performance data:
 
 ```bash
@@ -85,14 +88,35 @@ cd gpu-perf
 ./scripts/generate_dataset_full.sh
 ```
 
-This will:
+This will automatically run both steps below and output `data/runs_2080ti_final.csv`.
+
+**Option B: Manual Two-Step Process (More Control)**
+
+For more control over each step, run manually:
+
+```bash
+cd gpu-perf
+
+# Step 2a: Generate trial data
+./scripts/gen_trials_2080ti.sh
+
+# Step 2b: Process trials into final dataset
+python3 scripts/build_final_dataset.py \
+  "data/trials_*__2080ti.csv" \
+  data/props_2080ti.out \
+  data/stream_like_2080ti.out \
+  data/gemm_cublas_2080ti.out \
+  data/runs_2080ti_final.csv
+```
+
+Both approaches will:
 1. Build the CUDA runner binary
 2. Execute 16 kernels × 4 problem sizes = ~65 configurations
 3. Run 10 trials per configuration with warmup
 4. Aggregate results and calculate all metrics
 5. Output: `data/runs_2080ti_final.csv`
 
-For other GPUs, use the GPU-specific generation scripts in the pipeline.
+**For other GPUs**, replace `2080ti` with `4070`, `titanv`, or `titanx` in the commands above.
 
 ### Pipeline Details
 
