@@ -79,9 +79,9 @@ Calibration outputs:
 
 ### Step 2: Generate Dataset
 
-**Option A: Automated Pipeline (Recommended)**
+**Option A: Automated Pipeline (RTX 2080 Ti Only)**
 
-Run the complete pipeline to collect all performance data:
+For RTX 2080 Ti, use the automated script:
 
 ```bash
 cd gpu-perf
@@ -90,17 +90,24 @@ cd gpu-perf
 
 This will automatically run both steps below and output `data/runs_2080ti_final.csv`.
 
-**Option B: Manual Two-Step Process (More Control)**
+**Option B: Manual Two-Step Process (All GPUs)**
 
-For more control over each step, run manually:
+For **any GPU** (RTX 2080 Ti, RTX 4070, Titan V, or Titan X), run the two-step process:
 
 ```bash
 cd gpu-perf
 
-# Step 2a: Generate trial data
-./scripts/gen_trials_2080ti.sh
+# Step 2a: Generate trial data (choose your GPU)
+./scripts/gen_trials_2080ti.sh   # For RTX 2080 Ti
+# OR
+./scripts/gen_trials_4070.sh     # For RTX 4070
+# OR
+./scripts/gen_trials_titanv.sh   # For Titan V
+# OR
+./scripts/gen_trials_titanx.sh   # For Titan X
 
 # Step 2b: Process trials into final dataset
+# Replace "2080ti" with your GPU: 4070, titanv, or titanx
 python3 scripts/build_final_dataset.py \
   "data/trials_*__2080ti.csv" \
   data/props_2080ti.out \
@@ -110,13 +117,13 @@ python3 scripts/build_final_dataset.py \
 ```
 
 Both approaches will:
-1. Build the CUDA runner binary
+1. Build the CUDA runner binary for the specific GPU architecture
 2. Execute 16 kernels × 4 problem sizes = ~65 configurations
 3. Run 10 trials per configuration with warmup
 4. Aggregate results and calculate all metrics
-5. Output: `data/runs_2080ti_final.csv`
+5. Output: `data/runs_<gpu>_final.csv`
 
-**For other GPUs**, replace `2080ti` with `4070`, `titanv`, or `titanx` in the commands above.
+**Important**: You can only generate data for **one GPU at a time** since the pipeline uses the GPU currently available in your system.
 
 ### Pipeline Details
 
