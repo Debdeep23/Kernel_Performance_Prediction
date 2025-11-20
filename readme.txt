@@ -98,10 +98,10 @@ Place dataset files in predict-kernel-perf/data/:
 
 RUN ANALYTICAL MODEL:
 ---------------------
-cd predict-kernel-perf/scripts
-python3 analytical_model_occupancy.py
+cd predict-kernel-perf/data
+python3 ../scripts/analytical_model_occupancy.py
 
-OUTPUT: analytic_model_outputs/*.csv
+OUTPUT: predict-kernel-perf/data/analytic_model_outputs/*.csv
 - cross_gpu_predictions.csv
 - exp1_same_config_new_gpu.csv
 - exp2_new_configs_same_gpus.csv
@@ -109,10 +109,10 @@ OUTPUT: analytic_model_outputs/*.csv
 
 RUN MACHINE LEARNING MODELS:
 -----------------------------
-cd predict-kernel-perf/scripts
-python3 ml_baseline.py
+cd predict-kernel-perf/data
+python3 ../scripts/ml_baseline.py
 
-OUTPUT: ml_outputs/*.csv
+OUTPUT: predict-kernel-perf/data/ml_outputs/*.csv
 - exp1_*_[model]_predictions.csv
 - exp2_*_[model]_predictions.csv
 - exp3_*_[model]_predictions.csv
@@ -124,15 +124,15 @@ VISUALIZATION AND ANALYSIS
 
 GENERATE PLOTS:
 ---------------
-cd predict-kernel-perf/scripts
-python3 plots.py
+cd predict-kernel-perf/data
+python3 ../scripts/plots.py
 
 OUTPUT: Visualization plots comparing model predictions
 
 CREATE SUMMARY TABLES:
 ----------------------
-cd predict-kernel-perf/scripts
-python3 create_tables.py
+cd predict-kernel-perf/data
+python3 ../scripts/create_tables.py
 
 OUTPUT: Summary tables of model performance metrics
 
@@ -160,9 +160,9 @@ python3 scripts/build_final_dataset.py \
 cp data/runs_*.csv ../predict-kernel-perf/data/
 
 # 4. Run prediction models
-cd ../predict-kernel-perf/scripts
-python3 analytical_model_occupancy.py
-python3 ml_baseline.py
+cd ../predict-kernel-perf/data
+python3 ../scripts/analytical_model_occupancy.py
+python3 ../scripts/ml_baseline.py
 
 ================================================================================
 TROUBLESHOOTING
